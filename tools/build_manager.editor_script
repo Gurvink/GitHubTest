@@ -1,0 +1,208 @@
+-- Defold Build Manager - editor popup prototype
+-- Designed for the official editor.ui API (Defold 1.14.x).
+local M = {}
+local CONFIG = '.github/defold-build.json'
+local PLATFORMS = { 'windows', 'linux', 'macos', 'html5', 'android', 'ios' }
+
+local function defaults()
+    return { version = '1.0.0', variant = 'release', branch = 'main',
+    commit_message = 'Configure Defold build', report = true,
+    platforms = { windows = true, html5 = true } }
+end
+
+local function json_quote(value)
+    return '"' .. tostring(value):gsub('\\', '\\\\'):gsub('"', '\\"'):gsub('\n', '\\n'):gsub('\r', '\\r') .. '"'
+end
+
+local function config_json(data)
+    local parts = {}
+    for _, name in ipairs(PLATFORMS) do
+        parts[#parts + 1] = '    ' .. json_quote(name) .. ': ' .. tostring(data.platforms[name] == true)
+    end
+    return '{\n' ..
+    '  "version": ' .. json_quote(data.version) .. ',\n' ..
+    '  "variant": ' .. json_quote(data.variant) .. ',\n' ..
+    '  "branch": ' .. json_quote(data.branch) .. ',\n' ..
+    '  "buildReport": ' .. tostring(data.report) .. ',\n' ..
+    '  "platforms": {\n' .. table.concat(parts, ',\n') .. '\n  }\n}\n'
+end
+
+local function read_config()
+    local data = defaults()
+    local file = io.open(CONFIG, 'r')
+    if not file then return data end
+    local content = file:read('*a')
+    file:close()
+    for _, key in ipairs({ 'version', 'branch', 'variant' }) do
+        local value = content:match('"' .. key .. '"%s*:%s*"([^"]+)"')
+        if value then data[key] = value end
+    end
+    data.report = content:match('"buildReport"%s*:%s*(true)') == 'true'
+    for _, key in ipairs(PLATFORMS) do
+        data.platforms[key] = content:match('"' .. key .. '"%s*:%s*(true)') == 'true'
+    end
+    return data
+end
+
+local function save_config(data)
+    if not data.version:match('^%d+%.%d+%.%d+[%w%.%-]*$') then
+        error('Use a version such as 1.2.3')
+    end
+    local count = 0
+    for _, key in ipairs(PLATFORMS) do
+        if data.platforms[key] then count = count + 1 end
+    end
+    if count == 0 then error('Select at least one platform') end
+    editor.create_directory('/.github')
+    local file, err = io.open(CONFIG, 'w')
+    if not file then error('Cannot write ' .. CONFIG .. ': ' .. tostring(err)) end
+    file:write(config_json(data))
+    file:close()
+    print('Defold Build Manager: Saved ' .. CONFIG)
+end
+
+local function run_git(...)
+    print(...)
+    
+    return editor.execute('git', ..., {
+        out = 'capture', 
+        err = 'stdout', 
+        reload_resources = false
+    })
+end
+
+-- Load local branches each time the popup opens. Only local branches are shown,
+-- because Commit & Push operates on the checked-out branch.
+local function git_branches()
+    local current = run_git('branch', '--show-current')
+    local raw = run_git('for-each-ref', '--format=%(refname:short)', 'refs/heads')
+    local branches, seen = {}, {}
+    for line in tostring(raw):gmatch('[^\r\n]+') do
+        if line ~= '' and not seen[line] then
+            branches[#branches + 1] = line
+            seen[line] = true
+        end
+    end
+    table.sort(branches)
+    if current == '' then
+        error('Git is in detached HEAD mode. Check out a local branch in GitKraken first.')
+    end
+    if not seen[current] then
+        branches[#branches + 1] = current
+        table.sort(branches)
+    end
+    return branches, current
+end
+
+local function push_config(data)
+    -- Deliberately stage only the build config, not unrelated game changes.
+    local branch = run_git('branch', '--show-current')
+    branch = tostring(branch):gsub('%s+$', '')
+    if branch ~= data.branch then
+        error('Current Git branch is ' .. branch .. ', selected branch is ' .. data.branch)
+    end
+    local pre_staged = tostring(run_git('diff', '--cached', '--name-only'))
+    if pre_staged:gsub('%s+', '') ~= '' then
+        error('There are already staged changes. Commit or unstage them in GitKraken before using Commit & Push.')
+    end
+    run_git('add', '--', CONFIG)
+    local changes = run_git('diff', '--cached', '--name-only')
+    if not tostring(changes):find(CONFIG, 1, true) then
+        print('Defold Build Manager: No staged build config changes; pushing existing commits.')
+    else
+        run_git('commit', '-m', data.commit_message)
+    end
+    run_git('push', 'origin', 'HEAD')
+    print('Defold Build Manager: Git push completed. A GitHub Actions workflow must be configured separately.')
+end
+
+local function copy_with(data, key, value)
+    local copy = {}
+    for k, v in pairs(data) do copy[k] = v end
+    copy[key] = value
+    return copy
+end
+
+local popup = editor.ui.component(function(props)
+    local data, set_data = editor.ui.use_state(function()
+        local config = read_config()
+        -- Current branch always wins over a stale branch saved in JSON.
+        config.branch = props.current_branch
+        return config
+    end)
+    local function update(key, value) set_data(copy_with(data, key, value)) end
+    local elements = {
+        editor.ui.heading({text = 'Build settings'}),
+        editor.ui.label({text = 'Game version (major.minor.patch)'}),
+        editor.ui.string_field({value = data.version, on_value_changed = function(v) update('version', v) end}),
+        editor.ui.label({text = 'Git branch (local branches)'}),
+        editor.ui.select_box({value = data.branch, options = props.branches, on_value_changed = function(v) update('branch', v) end}),
+        editor.ui.paragraph({text = 'Checked out: ' .. props.current_branch .. '. Choosing another branch does not check it out. Switch branches in GitKraken before Commit & Push.'}),
+        editor.ui.label({text = 'Build variant'}),
+        editor.ui.select_box({value = data.variant, options = {'debug', 'release', 'headless'}, on_value_changed = function(v) update('variant', v) end}),
+        editor.ui.separator({}),
+        editor.ui.heading({text = 'Platforms'}),
+    }
+    for _, platform in ipairs(PLATFORMS) do
+        local key = platform
+        elements[#elements + 1] = editor.ui.check_box({
+            text = key, value = data.platforms[key] == true,
+            on_value_changed = function(checked)
+                local platforms = {}
+                for k,v in pairs(data.platforms) do platforms[k] = v end
+                platforms[key] = checked
+                update('platforms', platforms)
+            end
+        })
+    end
+    elements[#elements + 1] = editor.ui.separator({})
+    elements[#elements + 1] = editor.ui.check_box({text = 'Generate build report', value = data.report,
+    on_value_changed = function(v) update('report', v) end})
+    elements[#elements + 1] = editor.ui.label({text = 'Git commit message'})
+    elements[#elements + 1] = editor.ui.string_field({value = data.commit_message,
+    on_value_changed = function(v) update('commit_message', v) end})
+    elements[#elements + 1] = editor.ui.paragraph({text = 'Save only changes the build config. Commit & Push sends the config to origin via your local Git credentials.'})
+    return editor.ui.dialog({
+        title = 'Defold Build Manager (Prototype)', width = 480, height = 690, resizable = true,
+        content = editor.ui.scroll({content = editor.ui.vertical({padding = editor.ui.PADDING.LARGE, children = elements})}),
+        buttons = {
+            editor.ui.dialog_button({text = 'Cancel', cancel = true}),
+            editor.ui.dialog_button({text = 'Save', result = {action = 'save', data = data}}),
+            editor.ui.dialog_button({text = 'Commit & Push', result = {action = 'push', data = data}}),
+        }
+    })
+end)
+
+function M.get_commands()
+    return {{
+        label = 'Defold Build Manager...',
+        locations = {'Project'},
+        run = function()
+            local ok_branches, branches, current = pcall(git_branches)
+            if not ok_branches then
+                print('Defold Build Manager Git ERROR: ' .. tostring(branches))
+                return
+            end
+            local result = editor.ui.show_dialog(popup({branches = branches, current_branch = current}))
+            if not result then return end
+            local ok, err = pcall(save_config, result.data)
+            if not ok then print('Defold Build Manager ERROR: ' .. tostring(err)); return end
+            if result.action == 'push' then
+                local confirm = editor.ui.show_dialog(editor.ui.dialog({
+                    title = 'Confirm Git push',
+                    content = editor.ui.paragraph({text = 'Commit the build configuration and push current HEAD to origin? This may trigger GitHub Actions.'}),
+                    buttons = {
+                        editor.ui.dialog_button({text = 'Cancel', cancel = true}),
+                        editor.ui.dialog_button({text = 'Push', result = true})
+                    }
+                }))
+                if confirm then
+                    local pushed, push_err = pcall(push_config, result.data)
+                    if not pushed then print('Defold Build Manager Git ERROR: ' .. tostring(push_err)) end
+                end
+            end
+        end
+    }}
+end
+
+return M

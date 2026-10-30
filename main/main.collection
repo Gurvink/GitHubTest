@@ -1,0 +1,54 @@
+name: "main"
+scale_along_z: 0
+embedded_instances {
+  id: "board"
+  data: "components {\n"
+  "  id: \"script\"\n"
+  "  component: \"/main/board.script\"\n"
+  "}\n"
+  "embedded_components {\n"
+  "  id: \"fish_factory\"\n"
+  "  type: \"factory\"\n"
+  "  data: \"prototype: \\\"/main/fish.go\\\"\\n"
+  "\"\n"
+  "}\n"
+  ""
+}
+embedded_instances {
+  id: "background"
+  data: "embedded_components {\n"
+  "  id: \"sprite\"\n"
+  "  type: \"sprite\"\n"
+  "  data: \"default_animation: \\\"bg\\\"\\n"
+  "material: \\\"/builtins/materials/sprite.material\\\"\\n"
+  "textures {\\n"
+  "  sampler: \\\"texture_sampler\\\"\\n"
+  "  texture: \\\"/assets/sprites.atlas\\\"\\n"
+  "}\\n"
+  "\"\n"
+  "}\n"
+  ""
+  position {
+    x: 512.0
+    y: 512.0
+    z: -0.9
+  }
+}
+embedded_instances {
+  id: "camera"
+  data: "embedded_components {\n"
+  "  id: \"camera\"\n"
+  "  type: \"camera\"\n"
+  "  data: \"aspect_ratio: 1.0\\n"
+  "fov: 0.7854\\n"
+  "near_z: -1.0\\n"
+  "far_z: 1.0\\n"
+  "orthographic_projection: 1\\n"
+  "\"\n"
+  "}\n"
+  ""
+  position {
+    x: 512.0
+    y: 512.0
+  }
+}

@@ -63,7 +63,7 @@ end
 
 local function run_git(...)
     print(...)
-    
+
     return editor.execute('git', ..., {
         out = 'capture', 
         err = 'stdout', 
@@ -107,6 +107,7 @@ local function push_config(data)
     end
     run_git('add', '--', CONFIG)
     local changes = run_git('diff', '--cached', '--name-only')
+    print('CHANGES', changes)
     if not tostring(changes):find(CONFIG, 1, true) then
         print('Defold Build Manager: No staged build config changes; pushing existing commits.')
     else

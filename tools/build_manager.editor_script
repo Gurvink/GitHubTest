@@ -156,12 +156,12 @@ local PLATFORM_SETTINGS = {
             label = "Architectures",
             type = "multiselect",
             options = {
-                "x86_64",
-                "arm64"
+                "x86_64-macos",
+                "arm64-macos"
             },
             default = {
-                "x86_64",
-                "arm64"
+                "x86_64-macos",
+                "arm64-macos"
             }
         }
     },
@@ -172,11 +172,12 @@ local PLATFORM_SETTINGS = {
             label = "Architectures",
             type = "multiselect",
             options = {
-                "32-bit (armv7)",
-                "64-bit (arm64)"
+                "arm64-android",
+                "armv7-android",
+                "x86_64-android"
             },
             default = {
-                "64-bit (arm64)"
+                "arm64-android",
             }
         },
         {
@@ -233,10 +234,10 @@ local PLATFORM_SETTINGS = {
             label = "Architectures",
             type = "multiselect",
             options = {
-                "WebAssembly (wasm)",
-                "WebAssembly (wasm) + Thread support"
+                "wasm-web",
+                "wasm_pthread-web"
             },
-            default = { "WebAssembly (wasm)" }
+            default = { "wasm-web" }
         }
     },
 

@@ -14,6 +14,7 @@ with open(".github/build.json") as f:
 
         jobs.append({
             "name": name,
+            "version": config.get("version", "0.0.0"),
             "platform": data["platform"],
             "variant": settings.get("variant", "debug"),
             "architectures": ",".join(

@@ -1,7 +1,7 @@
 import json
 import os
 
-with open("../build.json") as f:
+with open(".github/build.json") as f:
     config = json.load(f)
 
     jobs = []

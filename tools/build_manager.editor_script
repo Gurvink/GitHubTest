@@ -1,209 +1,757 @@
--- Defold Build Manager - editor popup prototype
--- Designed for the official editor.ui API (Defold 1.14.x).
+local PLATFORMS = {
+    windows = "x86_64-win32",
+    linux = "x86_64-linux",
+    macos = "x86_64-macos",
+    android = "armv7-android",
+    ios = "arm64-ios",
+    html5 = "wasm-web"
+}
+
+local BUNDLE_SETTINGS = {
+    {
+        key = "app_type",
+        label = "App Type",
+        type = "select",
+        options = {
+            "default",
+            "curator",
+            "viewer",
+        },
+        default = "default"
+    },
+    {
+        key = "debug",
+        label = "Debug",
+        type = "checkbox",
+        default = false
+    },
+    {
+        key = "ab_testing",
+        label = "AB Testing",
+        type = "checkbox",
+        default = false
+    },
+    {
+        key = "force_version",
+        label = "Force Version",
+        type = "checkbox",
+        default = false
+    },
+    {
+        key = "Forced Version",
+        label = "Forced Version",
+        type = "select",
+        options = {
+            "default"
+        },
+        default = "default"
+    },
+    {
+        key = "Force creation",
+        label = "Force creation",
+        type = "checkbox",
+        default = false
+    },
+    {
+        key = "amplitude",
+        label = "Amplitude",
+        type = "checkbox",
+        default = false
+    },
+    {
+        key = "region_lock",
+        label = "Region Lock",
+        type = "checkbox",
+        default = false
+    },
+}
+
+
+local COMMON_SETTINGS = {
+    {
+        key = "variant",
+        label = "Variant",
+        type = "select",
+        options = {
+            "debug",
+            "release",
+            "headless"
+        },
+        default = "debug"
+    },
+    {
+        key = "texture_compression",
+        label = "Texture Compression",
+        type = "select",
+        options = {
+            "enabled",
+            "disabled",
+            "editor"
+        },
+        default = "editor"
+    },
+    {
+        key = "with_symbols",
+        label = "Generate Debug Symbols",
+        type = "checkbox",
+        default = false
+    },
+    {
+        key = "build_report",
+        label = "Generate Build Report",
+        type = "checkbox",
+        default = false
+    },
+    {
+        key = "liveupdate",
+        label = "Publish Live Update Content",
+        type = "checkbox",
+        default = false
+    },
+    {
+        key = "contentless",
+        label = "Contentless Bundle",
+        type = "checkbox",
+        default = false
+    },
+    {
+        key = "output",
+        label = "Output Directory",
+        type = "directory",
+        default = "builds"
+    }
+}
+
+
+local PLATFORM_SETTINGS = {
+    windows = {
+        {
+            key = "platform",
+            label = "Platform",
+            type = "select",
+            options = {
+                "64-bit",
+                "32-bit"
+            },
+            default = "64-bit"
+        }
+    },
+
+    linux = {
+        {
+            key = "platform",
+            label = "Platform",
+            type = "select",
+            options = {
+                "x64",
+                "arm64"
+            },
+            default = "x64"
+        }
+    },
+
+    macos = {
+        {
+            key = "architectures",
+            label = "Architectures",
+            type = "multiselect",
+            options = {
+                "x86_64",
+                "arm64"
+            },
+            default = {
+                "x86_64",
+                "arm64"
+            }
+        }
+    },
+
+    android = {
+        {
+            key = "architectures",
+            label = "Architectures",
+            type = "multiselect",
+            options = {
+                "32-bit (armv7)",
+                "64-bit (arm64)"
+            },
+            default = {
+                "64-bit (arm64)"
+            }
+        },
+        {
+            key = "bundle_format",
+            label = "Bundle Format",
+            type = "multiselect",
+            options = {
+                "apk",
+                "aab"
+            },
+            default = { "apk" }
+        },
+        {
+            key = "keystore",
+            label = "Keystore",
+            type = "file",
+            default = ""
+        },
+        {
+            key = "keystore_pass",
+            label = "Keystore Password File",
+            type = "file",
+            default = ""
+        },
+        {
+            key = "key_pass",
+            label = "Key Password File",
+            type = "file",
+            default = ""
+        },
+        {
+            key = "install",
+            label = "Install on Connected Device",
+            type = "checkbox",
+            default = false
+        },
+        {
+            key = "launch",
+            label = "Launch Installed App",
+            type = "checkbox",
+            default = false
+        },
+        {
+            key = "version_code",
+            label = "Version Code",
+            type = "text",
+            default = ""
+        }
+    },
+
+    html5 = {
+        {
+            key = "architectures",
+            label = "Architectures",
+            type = "multiselect",
+            options = {
+                "WebAssembly (wasm)",
+                "WebAssembly (wasm) + Thread support"
+            },
+            default = { "WebAssembly (wasm)" }
+        }
+    },
+
+    ios = {
+        {
+            key = "bundle_version",
+            label = "Bundle Version",
+            type = "text",
+            default = ""
+        }
+    }
+}
+
+
+
+local CONFIG = '.github/build.json'
+
 local M = {}
-local CONFIG = '.github/defold-build.json'
-local PLATFORMS = { 'windows', 'linux', 'macos', 'html5', 'android', 'ios' }
 
-local function defaults()
-    return { version = '1.0.0', variant = 'release', branch = 'main',
-    commit_message = 'Configure Defold build', report = true,
-    platforms = { windows = true, html5 = true } }
-end
+local function load_config()
+    local file = io.open(CONFIG, "r")
 
-local function json_quote(value)
-    return '"' .. tostring(value):gsub('\\', '\\\\'):gsub('"', '\\"'):gsub('\n', '\\n'):gsub('\r', '\\r') .. '"'
-end
-
-local function config_json(data)
-    local parts = {}
-    for _, name in ipairs(PLATFORMS) do
-        parts[#parts + 1] = '    ' .. json_quote(name) .. ': ' .. tostring(data.platforms[name] == true)
+    if not file then
+        return nil
     end
-    return '{\n' ..
-    '  "version": ' .. json_quote(data.version) .. ',\n' ..
-    '  "variant": ' .. json_quote(data.variant) .. ',\n' ..
-    '  "branch": ' .. json_quote(data.branch) .. ',\n' ..
-    '  "buildReport": ' .. tostring(data.report) .. ',\n' ..
-    '  "platforms": {\n' .. table.concat(parts, ',\n') .. '\n  }\n}\n'
-end
 
-local function read_config()
-    local data = defaults()
-    local file = io.open(CONFIG, 'r')
-    if not file then return data end
-    local content = file:read('*a')
+    local content = file:read("*a")
     file:close()
-    for _, key in ipairs({ 'version', 'branch', 'variant' }) do
-        local value = content:match('"' .. key .. '"%s*:%s*"([^"]+)"')
-        if value then data[key] = value end
+
+    local success, result = pcall(json.decode, content)
+
+    if not success or type(result) ~= "table" then
+        print("Failed to load build config")
+        return nil
     end
-    data.report = content:match('"buildReport"%s*:%s*(true)') == 'true'
-    for _, key in ipairs(PLATFORMS) do
-        data.platforms[key] = content:match('"' .. key .. '"%s*:%s*(true)') == 'true'
+
+    return result
+end
+
+local function initial_data(use_default)
+    local saved = use_default ~= true and load_config() or nil
+
+    local data = {
+        version = saved and saved.version or "0.0.0",
+        platforms = {}
+    }
+
+    for key, platform in pairs(PLATFORMS) do
+        local saved_platform =
+            saved
+            and saved.platforms
+            and saved.platforms[key]
+            or {}
+
+        local saved_settings =
+            saved_platform.settings or {}
+
+        local settings = {}
+        local base = key:match("^[^_]+")
+
+        for _, group in ipairs({
+            COMMON_SETTINGS,
+            PLATFORM_SETTINGS[base] or {},
+            BUNDLE_SETTINGS
+        }) do
+            for _, setting in ipairs(group) do
+                local value = saved_settings[setting.key]
+
+                if value == nil then
+                    value = setting.default
+                end
+
+                settings[setting.key] = value
+            end
+        end
+
+        data.platforms[key] = {
+            include = saved_platform.include == true,
+            platform = platform,
+            settings = settings
+        }
     end
+
     return data
 end
 
-local function save_config(data)
-    if not data.version:match('^%d+%.%d+%.%d+[%w%.%-]*$') then
-        error('Use a version such as 1.2.3')
-    end
-    local count = 0
-    for _, key in ipairs(PLATFORMS) do
-        if data.platforms[key] then count = count + 1 end
-    end
-    if count == 0 then error('Select at least one platform') end
-    editor.create_directory('/.github')
-    local file, err = io.open(CONFIG, 'w')
-    if not file then error('Cannot write ' .. CONFIG .. ': ' .. tostring(err)) end
-    file:write(config_json(data))
-    file:close()
-    print('Defold Build Manager: Saved ' .. CONFIG)
-end
 
-local function run_git(...)
-    print(...)
-
-    return editor.execute('git', ..., {
-        out = 'capture', 
-        err = 'stdout', 
-        reload_resources = false
-    })
-end
-
--- Load local branches each time the popup opens. Only local branches are shown,
--- because Commit & Push operates on the checked-out branch.
-local function git_branches()
-    local current = run_git('branch', '--show-current')
-    local raw = run_git('for-each-ref', '--format=%(refname:short)', 'refs/heads')
-    local branches, seen = {}, {}
-    for line in tostring(raw):gmatch('[^\r\n]+') do
-        if line ~= '' and not seen[line] then
-            branches[#branches + 1] = line
-            seen[line] = true
-        end
-    end
-    table.sort(branches)
-    if current == '' then
-        error('Git is in detached HEAD mode. Check out a local branch in GitKraken first.')
-    end
-    if not seen[current] then
-        branches[#branches + 1] = current
-        table.sort(branches)
-    end
-    return branches, current
-end
-
-local function push_config(data)
-    -- Deliberately stage only the build config, not unrelated game changes.
-    local branch = run_git('branch', '--show-current')
-    branch = tostring(branch):gsub('%s+$', '')
-    if branch ~= data.branch then
-        error('Current Git branch is ' .. branch .. ', selected branch is ' .. data.branch)
-    end
-    local pre_staged = tostring(run_git('diff', '--cached', '--name-only'))
-    if pre_staged:gsub('%s+', '') ~= '' then
-        error('There are already staged changes. Commit or unstage them in GitKraken before using Commit & Push.')
-    end
-    run_git('add', '--', CONFIG)
-    local changes = run_git('diff', '--cached', '--name-only')
-    print('CHANGES', changes)
-    if not tostring(changes):find(CONFIG, 1, true) then
-        print('Defold Build Manager: No staged build config changes; pushing existing commits.')
-    else
-        run_git('commit', '-m', data.commit_message)
-    end
-    run_git('push', 'origin', 'HEAD')
-    print('Defold Build Manager: Git push completed. A GitHub Actions workflow must be configured separately.')
-end
 
 local function copy_with(data, key, value)
     local copy = {}
-    for k, v in pairs(data) do copy[k] = v end
+    for k, v in pairs(data) do
+        copy[k] = v
+    end
     copy[key] = value
     return copy
 end
 
-local popup = editor.ui.component(function(props)
-    local data, set_data = editor.ui.use_state(function()
-        local config = read_config()
-        -- Current branch always wins over a stale branch saved in JSON.
-        config.branch = props.current_branch
-        return config
-    end)
-    local function update(key, value) set_data(copy_with(data, key, value)) end
-    local elements = {
-        editor.ui.heading({text = 'Build settings'}),
-        editor.ui.label({text = 'Game version (major.minor.patch)'}),
-        editor.ui.string_field({value = data.version, on_value_changed = function(v) update('version', v) end}),
-        editor.ui.label({text = 'Git branch (local branches)'}),
-        editor.ui.select_box({value = data.branch, options = props.branches, on_value_changed = function(v) update('branch', v) end}),
-        editor.ui.paragraph({text = 'Checked out: ' .. props.current_branch .. '. Choosing another branch does not check it out. Switch branches in GitKraken before Commit & Push.'}),
-        editor.ui.label({text = 'Build variant'}),
-        editor.ui.select_box({value = data.variant, options = {'debug', 'release', 'headless'}, on_value_changed = function(v) update('variant', v) end}),
-        editor.ui.separator({}),
-        editor.ui.heading({text = 'Platforms'}),
-    }
-    for _, platform in ipairs(PLATFORMS) do
-        local key = platform
-        elements[#elements + 1] = editor.ui.check_box({
-            text = key, value = data.platforms[key] == true,
-            on_value_changed = function(checked)
-                local platforms = {}
-                for k,v in pairs(data.platforms) do platforms[k] = v end
-                platforms[key] = checked
-                update('platforms', platforms)
+local function process_data(data, build)
+    if not data then
+        return nil
+    end
+
+    editor.create_directory('/.github')
+    local file, err = io.open(CONFIG, 'w')
+    if not file then error('Cannot write to' .. CONFIG .. ': ' .. tostring(err)) end
+    file:write(json.encode(data))
+    file:close()
+
+    if build then
+        for name, platform_data in pairs(data.platforms) do
+            if platform_data.include then
+                local platform = PLATFORMS[name]
+                local settings = platform_data.settings
             end
+        end
+    end
+end
+
+local function to_relative_path(path)
+    local root = editor.external_file_attributes(".").path
+
+    root = root:gsub("\\", "/"):gsub("/+$", "")
+    path = path:gsub("\\", "/"):gsub("/+$", "")
+
+    local compare_root = root
+    local compare_path = path
+
+    if editor.platform == "x86_64-win32" then
+        compare_root = root:lower()
+        compare_path = path:lower()
+    end
+
+    if compare_path == compare_root then
+        return "."
+    end
+
+    if compare_path:sub(1, #compare_root + 1)
+        == compare_root .. "/" then
+        return path:sub(#root + 2)
+    end
+
+    return nil
+end
+
+local function get_default_settings(platform, saved_settings)
+    local data = {}
+
+    for _, setting in ipairs(COMMON_SETTINGS) do
+        data[setting.key] = setting.default
+    end
+
+    for _, setting in ipairs(PLATFORM_SETTINGS[platform] or {}) do
+        data[setting.key] = setting.default
+    end
+
+    for key, value in pairs(saved_settings or {}) do
+        data[key] = value
+    end
+
+    return data
+end
+
+local function get_ui_element(setting, value, on_value_changed)
+    if setting.type == 'select' then
+        return editor.ui.horizontal({
+            grow = true,
+            children = {
+                editor.ui.label({
+                    text = setting.label
+                }),
+                editor.ui.select_box({
+                    value = value,
+                    options = setting.options,
+                    on_value_changed = on_value_changed
+                })
+            }
+        })
+    elseif setting.type == 'checkbox' then
+        return editor.ui.check_box({
+            text = setting.label,
+            value = value == true,
+            on_value_changed = on_value_changed
+        })
+    elseif setting.type == "directory"
+        or setting.type == "file" then
+        local is_directory = setting.type == "directory"
+
+        return editor.ui.horizontal({
+            grow = true,
+            children = {
+                editor.ui.label({
+                    text = setting.label
+                }),
+
+                editor.ui.string_field({
+                    value = value or "",
+                    grow = true,
+                    enabled = false
+                }),
+
+                editor.ui.button({
+                    text = "Select",
+                    on_pressed = function()
+                        local opts = {
+                            title = is_directory
+                                and "Select Directory"
+                                or "Select File"
+                        }
+
+                        if value and value ~= "" then
+                            opts.path = value
+                        end
+
+                        local path
+
+                        if is_directory then
+                            path = editor.ui
+                                .show_external_directory_dialog(opts)
+                        else
+                            path = editor.ui
+                                .show_external_file_dialog(opts)
+                        end
+
+                        if path then
+                            local relative = to_relative_path(path)
+
+                            if relative then
+                                on_value_changed(relative)
+                            end
+                        end
+                    end
+                })
+            }
+        })
+    elseif setting.type == 'multiselect' then
+        local children = {
+            editor.ui.label({
+                text = setting.label
+            })
+        }
+
+        for _, option in ipairs(setting.options) do
+            local selected_option = option
+            local selected = false
+
+            for _, current in ipairs(value or {}) do
+                if current == selected_option then
+                    selected = true
+                    break
+                end
+            end
+
+            children[#children + 1] = editor.ui.check_box({
+                text = selected_option,
+                value = selected,
+
+                on_value_changed = function(checked)
+                    local updated = {}
+
+                    for _, current in ipairs(value or {}) do
+                        if current ~= selected_option then
+                            updated[#updated + 1] = current
+                        end
+                    end
+
+                    if checked then
+                        updated[#updated + 1] = selected_option
+                    end
+
+                    on_value_changed(updated)
+                end
+            })
+        end
+
+        return editor.ui.vertical({
+            children = children
+        })
+    elseif setting.type == 'text' then
+        return editor.ui.horizontal({
+            grow = true,
+            children = {
+                editor.ui.label({
+                    text = setting.label
+                }),
+                editor.ui.string_field({
+                    value = value,
+                    grow = true,
+                    on_value_changed = on_value_changed
+                })
+            }
         })
     end
-    elements[#elements + 1] = editor.ui.separator({})
-    elements[#elements + 1] = editor.ui.check_box({text = 'Generate build report', value = data.report,
-    on_value_changed = function(v) update('report', v) end})
-    elements[#elements + 1] = editor.ui.label({text = 'Git commit message'})
-    elements[#elements + 1] = editor.ui.string_field({value = data.commit_message,
-    on_value_changed = function(v) update('commit_message', v) end})
-    elements[#elements + 1] = editor.ui.paragraph({text = 'Save only changes the build config. Commit & Push sends the config to origin via your local Git credentials.'})
+    return editor.ui.label({
+        text = "Unknown setting type: " .. tostring(setting.type)
+    })
+end
+
+local settings_popup = editor.ui.component(function(props)
+    local data, set_data = editor.ui.use_state(get_default_settings, props.platform, props.saved_settings)
+
+    local children = {}
+
+    local function add_settings(settings)
+        for _, setting in ipairs(settings) do
+            local key = setting.key
+
+            children[#children + 1] = get_ui_element(
+                setting,
+                data[key],
+                function(value)
+                    set_data(copy_with, key, value)
+                end
+            )
+        end
+    end
+
+    add_settings(COMMON_SETTINGS)
+
+    add_settings(PLATFORM_SETTINGS[props.platform] or {})
+
+    add_settings(BUNDLE_SETTINGS)
+
     return editor.ui.dialog({
-        title = 'Defold Build Manager (Prototype)', width = 480, height = 690, resizable = true,
-        content = editor.ui.scroll({content = editor.ui.vertical({padding = editor.ui.PADDING.LARGE, children = elements})}),
+        title = props.platform .. " Settings",
+        content = editor.ui.scroll({
+            content = editor.ui.vertical({
+                padding = editor.ui.PADDING.LARGE,
+                children = children
+            })
+        }),
         buttons = {
-            editor.ui.dialog_button({text = 'Cancel', cancel = true}),
-            editor.ui.dialog_button({text = 'Save', result = {action = 'save', data = data}}),
-            editor.ui.dialog_button({text = 'Commit & Push', result = {action = 'push', data = data}}),
+            editor.ui.dialog_button({
+                text = "Cancel",
+                cancel = true
+            }),
+            editor.ui.dialog_button({
+                text = "Save",
+                default = true,
+                result = { settings = data }
+            })
+        }
+    })
+end)
+
+local popup = editor.ui.component(function(props)
+    local data, set_data = editor.ui.use_state(initial_data)
+
+    local function update(key, value)
+        set_data(function(current)
+            return copy_with(current, key, value)
+        end)
+    end
+
+    local elements = {
+        editor.ui.heading({
+            text = 'Build settings'
+        }),
+
+        editor.ui.label({
+            text = 'Game version'
+        }),
+
+        editor.ui.string_field({
+            value = data.version,
+            on_value_changed = function(value)
+                update('version', value)
+            end
+        }),
+
+        editor.ui.label({
+            text = 'Platforms'
+        }),
+    }
+
+    local rows = {}
+
+    for name, platform in pairs(PLATFORMS) do
+        local key = name
+
+        rows[#rows + 1] = {
+            editor.ui.check_box({
+                text = key,
+                value = data.platforms[key].include == true,
+
+                on_value_changed = function(value)
+                    set_data(function(current)
+                        local platform_data = copy_with(
+                            current.platforms[key], "include", value
+                        )
+
+                        local platforms = copy_with(
+                            current.platforms, key, platform_data
+                        )
+
+                        return copy_with(
+                            current, "platforms", platforms
+                        )
+                    end)
+                end
+            }),
+
+            editor.ui.separator({}),
+
+            editor.ui.button({
+                text = "Settings",
+                on_pressed = function()
+                    local p = key:match("^[^_]+")
+
+                    local result = editor.ui.show_dialog(
+                        settings_popup({ platform = p, saved_settings = data.platforms[key].settings })
+                    )
+
+                    if result and result.settings then
+                        set_data(function(current)
+                            local platform_data = copy_with(
+                                current.platforms[key],
+                                "settings",
+                                result.settings
+                            )
+
+                            local platforms = copy_with(
+                                current.platforms,
+                                key,
+                                platform_data
+                            )
+
+                            return copy_with(
+                                current,
+                                "platforms",
+                                platforms
+                            )
+                        end)
+                    end
+                end
+            })
+        }
+    end
+
+    elements[#elements + 1] = editor.ui.grid({
+        columns = {
+            { grow = true },
+            {},
+            {}
+        },
+        spacing = editor.ui.SPACING.MEDIUM,
+        children = rows
+    })
+
+    return editor.ui.dialog({
+        title = 'Defold build manager',
+        width = 960,
+        height = 690,
+        resizable = true,
+
+        content = editor.ui.scroll({
+            content = editor.ui.vertical({
+                padding = editor.ui.PADDING.LARGE,
+                children = elements
+            })
+        }),
+
+        buttons = {
+            editor.ui.dialog_button({
+                text = 'Save config',
+                result = {
+                    action = 'push',
+                    build = false,
+                    data = data
+                }
+            }),
+
+            editor.ui.dialog_button({
+                text = 'Save config and build',
+                result = {
+                    action = 'push',
+                    build = true,
+                    data = data
+                }
+            }),
+
+            editor.ui.dialog_button({
+                text = 'Clear config',
+                result = {
+                    action = 'clear',
+                }
+            }),
+
+            editor.ui.dialog_button({
+                text = 'Cancel',
+                cancel = true
+            }),
         }
     })
 end)
 
 function M.get_commands()
-    return {{
-        label = 'Defold Build Manager...',
-        locations = {'Project'},
+    return { {
+        label = 'Build manager',
+        locations = { 'Project' },
+
         run = function()
-            local ok_branches, branches, current = pcall(git_branches)
-            if not ok_branches then
-                print('Defold Build Manager Git ERROR: ' .. tostring(branches))
+            local result = editor.ui.show_dialog(popup({}))
+
+            if not result then
+                print('Cancelled')
                 return
             end
-            local result = editor.ui.show_dialog(popup({branches = branches, current_branch = current}))
-            if not result then return end
-            local ok, err = pcall(save_config, result.data)
-            if not ok then print('Defold Build Manager ERROR: ' .. tostring(err)); return end
+
             if result.action == 'push' then
-                local confirm = editor.ui.show_dialog(editor.ui.dialog({
-                    title = 'Confirm Git push',
-                    content = editor.ui.paragraph({text = 'Commit the build configuration and push current HEAD to origin? This may trigger GitHub Actions.'}),
-                    buttons = {
-                        editor.ui.dialog_button({text = 'Cancel', cancel = true}),
-                        editor.ui.dialog_button({text = 'Push', result = true})
-                    }
-                }))
-                if confirm then
-                    local pushed, push_err = pcall(push_config, result.data)
-                    if not pushed then print('Defold Build Manager Git ERROR: ' .. tostring(push_err)) end
-                end
+                process_data(result.data, result.build)
+            elseif result.action == 'clear' then
+                process_data(initial_data(true), false)
             end
         end
-    }}
+    } }
 end
 
 return M

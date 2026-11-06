@@ -1,0 +1,107 @@
+
+name: Defold Build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+
+    outputs:
+      matrix: ${{ steps.config.outputs.matrix }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Read config
+        id: config
+        run: |
+          python3 .github/workflows/read_config.py > matrix.json
+
+  build:
+    needs: configure
+
+    strategy:
+      matrix: ${{fromJSON(needs.configure.outputs.matrix)}}
+      fail-fast: false
+    
+    name: Build for ${{ matrix.platform }} - ${{ matrix.variant }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Download Bob
+        run: |
+          curl -fL --retry 3 \
+            -o bob.jar \
+            https://github.com/defold/defold/releases/download/1.14.0/bob.jar
+
+      - name: Build
+        shell: bash
+        env:
+          TARGET: ${{ matrix.platform }}
+          VARIANT: ${{ matrix.variant }}
+          ARCHITECTURES: ${{ matrix.architectures }}
+          BUNDLE_FORMAT: ${{ matrix.bundle_format }}
+          COMPRESSION: ${{ matrix.texture_compression }}
+          SYMBOLS: ${{ matrix.with_symbols }}
+          REPORT: ${{ matrix.build_report }}
+          NAME: ${{ matrix.name }}
+
+        run: |
+          OPTIONS=(
+            --platform "$TARGET"
+            --variant "$VARIANT"
+            --archive
+            --bundle-output "builds/$NAME"
+          )
+
+          if [ -n "$ARCHITECTURES" ]; then
+            OPTIONS+=(--architectures "$ARCHITECTURES")
+          fi
+
+          if [ -n "$BUNDLE_FORMAT" ]; then
+            OPTIONS+=(--bundle-format "$BUNDLE_FORMAT")
+          fi
+
+          if [ "$COMPRESSION" = "true" ]; then
+            OPTIONS+=(--texture-compression)
+          fi
+
+          if [ "$SYMBOLS" = "true" ]; then
+            OPTIONS+=(--with-symbols)
+          fi
+
+          if [ "$REPORT" = "true" ]; then
+            OPTIONS+=(
+              --build-report-html "report.html"
+            )
+          fi
+
+          java -jar bob.jar \
+            "${OPTIONS[@]}" \
+            resolve distclean build bundle
+
+
+      - name: Upload Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.name }}
+          path: buids/${{ matrix.name }}/
+          if-no-files-found: error

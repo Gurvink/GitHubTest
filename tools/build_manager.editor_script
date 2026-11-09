@@ -231,10 +231,49 @@ local PLATFORM_SETTINGS = {
 
     ios = {
         {
-            key = "bundle_version",
-            label = "Bundle Version",
-            type = "text",
+            key = "sign",
+            label = "Sign application",
+            type = "checkbox",
+            default = false
+        },
+        {
+            key = "code_signing_identity",
+            label = "Code Signing Identity",
+            type = "Select",
+            options = {
+                "iPhone Developer",
+                "iPhone Distribution"
+            },
+            default = "iPhone Developer"
+        },
+        {
+            key = "provisioning_profile",
+            label = "Provisioning Profile",
+            type = "file",
             default = ""
+        },
+        {
+            key = "architectures",
+            label = "Architectures",
+            type = "multiselect",
+            options = {
+                "32-bit",
+                "64-bit",
+                "sim",
+            },
+            default = { "64-bit" }
+        },
+        {
+            key = "install",
+            label = "Install on Connected Device",
+            type = "checkbox",
+            default = false
+        },
+        {
+            key = "launch",
+            label = "Launch Installed App",
+            type = "checkbox",
+            default = false
         }
     }
 }
@@ -338,7 +377,7 @@ local function process_data(data, build)
         for name, platform_data in pairs(data.platforms) do
             if platform_data.include then
 
-                if editor.platform == "x86_64-win32" and name == "ios" then
+                if not editor.platform:sub(-#"macos") == "macos" and name == "ios" then
                     print('iOS builds require macOS')
                     return
                 end
@@ -771,6 +810,10 @@ function M.get_commands()
 
         run = function()
             local result = editor.ui.show_dialog(popup({}))
+
+            if not result then
+                return
+            end
 
             if result.action == 'push' then
                 process_data(result.data, result.build)

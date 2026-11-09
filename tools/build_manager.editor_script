@@ -7,10 +7,63 @@ local PLATFORMS = {
     html5 = "wasm-web"
 }
 
+local GLOBAL_SETTINGS = {
+    {
+        key = "version",
+        label = "Game Version",
+        type = "text",
+        tooltip = "The version of the game, used for live update and other purposes.",
+        default = "0.0.0"
+    },
+    {
+        key = "platform_path",
+        label = "Platform Path",
+        tooltip = "The path to the platform.lua file, used for platform-specific code.",
+        type = "file",
+        default = ""
+    },
+    {
+        key = "gamemanager_path",
+        label = "Game Manager Path",
+        tooltip = "The path to the gamemanager.lua file, used for game management.",
+        type = "file",
+        default = ""
+    },
+    {
+        key = "config_path",
+        label = "Config Path",
+        tooltip = "The path to the config.json file, used for configuration.",
+        type = "file",
+        default = ""
+    },
+    {
+        key = "ab_tester_path",
+        label = "AB Tester Path",
+        tooltip = "The path to the ab_tester.lua file, used for A/B testing.",
+        type = "file",
+        default = ""
+    },
+    {
+        key = "custom_api_path",
+        label = "Custom API Path",
+        tooltip = "The path to the custom_api.lua file, used for custom API calls.",
+        type = "file",
+        default = ""
+    },
+    {
+        key = "game_project_path",
+        label = "Game Project Path",
+        tooltip = "The path to the game project, used for building the game.",
+        type = "file",
+        default = ""
+    }
+}
+
 local BUNDLE_SETTINGS = {
     {
         key = "app_type",
         label = "App Type",
+        tooltip = "The type of the application, used for platform-specific code.",
         type = "select",
         options = {
             "default",
@@ -22,24 +75,28 @@ local BUNDLE_SETTINGS = {
     {
         key = "debug",
         label = "Debug",
+        tooltip = "Enable debug mode, which includes debug symbols and other debug features.",
         type = "checkbox",
         default = false
     },
     {
         key = "ab_testing",
         label = "AB Testing",
+        tooltip = "Enable A/B testing, which allows for testing different versions of the game.",
         type = "checkbox",
         default = false
     },
     {
         key = "force_version",
         label = "Force Version",
+        tooltip = "Force the version of the game for AB testing.",
         type = "checkbox",
         default = false
     },
     {
         key = "Forced Version",
         label = "Forced Version",
+        tooltip = "The forced version of the game for AB testing.",
         type = "select",
         options = {
             "default"
@@ -49,18 +106,21 @@ local BUNDLE_SETTINGS = {
     {
         key = "Force creation",
         label = "Force creation",
+        tooltip = "Force the creation of a new AB testing group.",
         type = "checkbox",
         default = false
     },
     {
         key = "amplitude",
         label = "Amplitude",
+        tooltip = "Enable Amplitude analytics, which allows for tracking user behavior.",
         type = "checkbox",
         default = false
     },
     {
         key = "region_lock",
         label = "Region Lock",
+        tooltip = "Enable region locking, which restricts amplitude to America and Georgia.",
         type = "checkbox",
         default = false
     },
@@ -71,6 +131,7 @@ local COMMON_SETTINGS = {
     {
         key = "variant",
         label = "Variant",
+        tooltip = "The engine variant to build.",
         type = "select",
         options = {
             "debug",
@@ -82,6 +143,7 @@ local COMMON_SETTINGS = {
     {
         key = "texture_compression",
         label = "Texture Compression",
+        tooltip = "The texture compression format to use. editor uses the editor settings.",
         type = "select",
         options = {
             "enabled",
@@ -93,24 +155,28 @@ local COMMON_SETTINGS = {
     {
         key = "with_symbols",
         label = "Generate Debug Symbols",
+        tooltip = "Generate debug symbols for the build. For debugging crashes and other issues.",
         type = "checkbox",
         default = false
     },
     {
         key = "build_report",
         label = "Generate Build Report",
+        tooltip = "Generate a build report for the build. For analyzing the build size and other metrics.",
         type = "checkbox",
         default = false
     },
     {
         key = "liveupdate",
         label = "Publish Live Update Content",
+        tooltip = "Publish live update content for the build. For updating the game without requiring a full rebuild.",
         type = "checkbox",
         default = false
     },
     {
         key = "contentless",
         label = "Contentless Bundle",
+        tooltip = "Create a contentless bundle for the build. For creating a bundle without any content.",
         type = "checkbox",
         default = false
     }
@@ -122,6 +188,7 @@ local PLATFORM_SETTINGS = {
         {
             key = "platform",
             label = "Platform",
+            tooltip = "The platform to build for.",
             type = "select",
             options = {
                 "64-bit",
@@ -136,6 +203,7 @@ local PLATFORM_SETTINGS = {
             key = "platform",
             label = "Platform",
             type = "select",
+            tooltip = "The platform to build for. X64 is for intel and AMD processors and arm64 for ARM processors.",
             options = {
                 "x64",
                 "arm64"
@@ -149,6 +217,7 @@ local PLATFORM_SETTINGS = {
             key = "architectures",
             label = "Architectures",
             type = "multiselect",
+            tooltip = "The architectures to build for. x86_64 is for intel and AMD processors and arm64 for Apple Silicon processors.",
             options = {
                 "x86_64-macos",
                 "arm64-macos"
@@ -165,6 +234,7 @@ local PLATFORM_SETTINGS = {
             key = "architectures",
             label = "Architectures",
             type = "multiselect",
+            tooltip = "The architectures to build for. arm64 is for ARM processors and armv7 for older ARM processors and x86_64 for Intel processors.",
             options = {
                 "arm64-android",
                 "armv7-android",
@@ -178,6 +248,7 @@ local PLATFORM_SETTINGS = {
             key = "bundle_format",
             label = "Bundle Format",
             type = "multiselect",
+            tooltip = "The bundle format to build for. apk is for Android devices and aab is for Google Play Store.",
             options = {
                 "apk",
                 "aab"
@@ -187,30 +258,35 @@ local PLATFORM_SETTINGS = {
         {
             key = "keystore",
             label = "Keystore",
+            tooltip = "The keystore file to use for signing the Android build.",
             type = "file",
             default = ""
         },
         {
             key = "keystore_pass",
             label = "Keystore Password File",
+            tooltip = "The keystore password file to use for signing the Android build.",
             type = "file",
             default = ""
         },
         {
             key = "key_pass",
             label = "Key Password File",
+            tooltip = "The key password file to use for signing the Android build.",
             type = "file",
             default = ""
         },
         {
             key = "install",
             label = "Install on Connected Device",
+            tooltip = "Install the build on a connected Android device after building.",
             type = "checkbox",
             default = false
         },
         {
             key = "launch",
             label = "Launch Installed App",
+            tooltip = "Launch the installed app on a connected Android device after building.",
             type = "checkbox",
             default = false
         }
@@ -221,6 +297,7 @@ local PLATFORM_SETTINGS = {
             key = "architectures",
             label = "Architectures",
             type = "multiselect",
+            tooltip = "The architectures to build for. wasm-web is for WebAssembly and wasm_pthread-web is for WebAssembly with pthreads.",
             options = {
                 "wasm-web",
                 "wasm_pthread-web"
@@ -233,13 +310,15 @@ local PLATFORM_SETTINGS = {
         {
             key = "sign",
             label = "Sign application",
+            tooltip = "Sign the application with a provisioning profile and code signing identity.",
             type = "checkbox",
             default = false
         },
         {
             key = "code_signing_identity",
             label = "Code Signing Identity",
-            type = "Select",
+            tooltip = "The code signing identity to use for signing the iOS build.",
+            type = "select",
             options = {
                 "iPhone Developer",
                 "iPhone Distribution"
@@ -249,6 +328,7 @@ local PLATFORM_SETTINGS = {
         {
             key = "provisioning_profile",
             label = "Provisioning Profile",
+            tooltip = "The provisioning profile to use for signing the iOS build.",
             type = "file",
             default = ""
         },
@@ -256,6 +336,7 @@ local PLATFORM_SETTINGS = {
             key = "architectures",
             label = "Architectures",
             type = "multiselect",
+            tooltip = "The architectures to build for. 32-bit is for older iOS devices and 64-bit is for newer iOS devices. sim is for the iOS simulator.",
             options = {
                 "32-bit",
                 "64-bit",
@@ -266,12 +347,14 @@ local PLATFORM_SETTINGS = {
         {
             key = "install",
             label = "Install on Connected Device",
+            tooltip = "Install the build on a connected iOS device after building.",
             type = "checkbox",
             default = false
         },
         {
             key = "launch",
             label = "Launch Installed App",
+            tooltip = "Launch the installed app on a connected iOS device after building.",
             type = "checkbox",
             default = false
         }
@@ -308,9 +391,18 @@ local function initial_data(use_default)
     local saved = use_default ~= true and load_config() or nil
 
     local data = {
-        version = saved and saved.version or "0.0.0",
         platforms = {}
     }
+
+    for key, value in ipairs(GLOBAL_SETTINGS) do
+        local saved_value = saved and saved[value.key] or nil
+
+        if saved_value == nil then
+            saved_value = value.default
+        end
+
+        data[value.key] = saved_value
+    end
 
     for key, platform in pairs(PLATFORMS) do
         local saved_platform =
@@ -372,16 +464,14 @@ local function process_data(data, build)
     if not file then error('Cannot write to' .. CONFIG .. ': ' .. tostring(err)) end
     file:write(json.encode(data))
     file:close()
-
     if build then
         for name, platform_data in pairs(data.platforms) do
             if platform_data.include then
-
-                if not editor.platform:sub(-#"macos") == "macos" and name == "ios" then
+                if name == "ios" and editor.platform:sub(- #"macos") ~= "macos" then
                     print('iOS builds require macOS')
-                    return
+                    goto continue
                 end
-                
+
                 local options = {
                     platform = platform_data.platform,
                     settings = platform_data.settings,
@@ -415,6 +505,7 @@ local function process_data(data, build)
                 end
 
                 editor.bob(options, "resolve", "distclean", "build", "bundle")
+                ::continue::
             end
         end
     end
@@ -464,24 +555,25 @@ local function get_default_settings(platform, saved_settings)
     return data
 end
 
+
 local function get_ui_element(setting, value, on_value_changed)
-    if setting.type == 'select' then
-        return editor.ui.horizontal({
-            grow = true,
-            children = {
-                editor.ui.label({
-                    text = setting.label
-                }),
-                editor.ui.select_box({
-                    value = value,
-                    options = setting.options,
-                    on_value_changed = on_value_changed
-                })
-            }
+    local label = editor.ui.label({
+        text = setting.label,
+        tooltip = setting.tooltip,
+        alignment = editor.ui.ALIGNMENT.LEFT
+    })
+
+    local input
+
+    if setting.type == "select" then
+        input = editor.ui.select_box({
+            value = value,
+            options = setting.options,
+            alignment = editor.ui.ALIGNMENT.RIGHT,
+            on_value_changed = on_value_changed
         })
-    elseif setting.type == 'checkbox' then
-        return editor.ui.check_box({
-            text = setting.label,
+    elseif setting.type == "checkbox" then
+        input = editor.ui.check_box({
             value = value == true,
             on_value_changed = on_value_changed
         })
@@ -489,13 +581,9 @@ local function get_ui_element(setting, value, on_value_changed)
         or setting.type == "file" then
         local is_directory = setting.type == "directory"
 
-        return editor.ui.horizontal({
+        input = editor.ui.horizontal({
             grow = true,
             children = {
-                editor.ui.label({
-                    text = setting.label
-                }),
-
                 editor.ui.string_field({
                     value = value or "",
                     grow = true,
@@ -504,6 +592,7 @@ local function get_ui_element(setting, value, on_value_changed)
 
                 editor.ui.button({
                     text = "Select",
+
                     on_pressed = function()
                         local opts = {
                             title = is_directory
@@ -511,18 +600,12 @@ local function get_ui_element(setting, value, on_value_changed)
                                 or "Select File"
                         }
 
-                        if value and value ~= "" then
-                            opts.path = value
-                        end
-
                         local path
 
                         if is_directory then
-                            path = editor.ui
-                                .show_external_directory_dialog(opts)
+                            path = editor.ui.show_external_directory_dialog(opts)
                         else
-                            path = editor.ui
-                                .show_external_file_dialog(opts)
+                            path = editor.ui.show_external_file_dialog(opts)
                         end
 
                         if path then
@@ -536,12 +619,8 @@ local function get_ui_element(setting, value, on_value_changed)
                 })
             }
         })
-    elseif setting.type == 'multiselect' then
-        local children = {
-            editor.ui.label({
-                text = setting.label
-            })
-        }
+    elseif setting.type == "multiselect" then
+        local checkboxes = {}
 
         for _, option in ipairs(setting.options) do
             local selected_option = option
@@ -554,67 +633,62 @@ local function get_ui_element(setting, value, on_value_changed)
                 end
             end
 
-            children[#children + 1] = editor.ui.check_box({
-                text = selected_option,
-                value = selected,
+            checkboxes[#checkboxes + 1] =
+                editor.ui.check_box({
+                    text = selected_option,
+                    value = selected,
 
-                on_value_changed = function(checked)
-                    local updated = {}
+                    on_value_changed = function(checked)
+                        local updated = {}
 
-                    for _, current in ipairs(value or {}) do
-                        if current ~= selected_option then
-                            updated[#updated + 1] = current
+                        for _, current in ipairs(value or {}) do
+                            if current ~= selected_option then
+                                updated[#updated + 1] = current
+                            end
                         end
-                    end
 
-                    if checked then
-                        updated[#updated + 1] = selected_option
-                    end
+                        if checked then
+                            updated[#updated + 1] =
+                                selected_option
+                        end
 
-                    on_value_changed(updated)
-                end
-            })
+                        on_value_changed(updated)
+                    end
+                })
         end
 
-        return editor.ui.vertical({
-            children = children
+        input = editor.ui.vertical({
+            children = checkboxes
         })
-    elseif setting.type == 'text' then
-        return editor.ui.horizontal({
+    elseif setting.type == "text" then
+        input = editor.ui.string_field({
+            value = value or "",
             grow = true,
-            children = {
-                editor.ui.label({
-                    text = setting.label
-                }),
-                editor.ui.string_field({
-                    value = value,
-                    grow = true,
-                    on_value_changed = on_value_changed
-                })
-            }
+            on_value_changed = on_value_changed
+        })
+    else
+        input = editor.ui.label({
+            text = "Unknown type: " .. tostring(setting.type)
         })
     end
-    return editor.ui.label({
-        text = "Unknown setting type: " .. tostring(setting.type)
-    })
+
+    return { label, input }
 end
+
 
 local settings_popup = editor.ui.component(function(props)
     local data, set_data = editor.ui.use_state(get_default_settings, props.platform, props.saved_settings)
 
     local children = {}
 
+
     local function add_settings(settings)
-        children[#children + 1] = editor.ui.heading({
-            text = settings == COMMON_SETTINGS and "Common Settings" or
-                settings == BUNDLE_SETTINGS and "Bundle Settings" or
-                settings == PLATFORM_SETTINGS[props.platform] and "Platform Settings" or
-                "Settings"
-        })
+        local rows = {}
+
         for _, setting in ipairs(settings) do
             local key = setting.key
 
-            children[#children + 1] = get_ui_element(
+            rows[#rows + 1] = get_ui_element(
                 setting,
                 data[key],
                 function(value)
@@ -622,7 +696,18 @@ local settings_popup = editor.ui.component(function(props)
                 end
             )
         end
+
+        children[#children + 1] = editor.ui.grid({
+            columns = {
+                { grow = true },
+                { grow = true }
+            },
+            spacing = editor.ui.SPACING.MEDIUM,
+            grow = true,
+            children = rows
+        })
     end
+
 
     add_settings(COMMON_SETTINGS)
 
@@ -632,6 +717,11 @@ local settings_popup = editor.ui.component(function(props)
 
     return editor.ui.dialog({
         title = props.platform .. " Settings",
+        children = {
+            editor.ui.paragraph({
+                text = "Configure the build settings for the " .. props.platform .. " platform."
+            })
+        },
         content = editor.ui.scroll({
             content = editor.ui.vertical({
                 padding = editor.ui.PADDING.LARGE,
@@ -661,26 +751,42 @@ local popup = editor.ui.component(function(props)
         end)
     end
 
-    local elements = {
-        editor.ui.heading({
-            text = 'Build settings'
-        }),
+    local elements = {}
 
-        editor.ui.label({
-            text = 'Game version'
-        }),
+    elements[#elements + 1] = editor.ui.heading({
+        text = "Global Settings",
+    })
 
-        editor.ui.string_field({
-            value = data.version,
-            on_value_changed = function(value)
-                update('version', value)
-            end
-        }),
+    local function add_settings(settings)
+        local rows = {}
 
-        editor.ui.label({
-            text = 'Platforms'
-        }),
-    }
+        for _, setting in ipairs(settings) do
+            local key = setting.key
+
+            rows[#rows + 1] = get_ui_element(
+                setting,
+                data[key],
+                function(value)
+                    update(key, value)
+                end
+            )
+        end
+
+        elements[#elements + 1] = editor.ui.grid({
+            columns = {
+                {},
+                { grow = true }
+            },
+            spacing = editor.ui.SPACING.MEDIUM,
+            children = rows
+        })
+    end
+
+    add_settings(GLOBAL_SETTINGS)
+
+    elements[#elements + 1] = editor.ui.heading({
+        text = "Platforms",
+    })
 
     local rows = {}
 
@@ -709,7 +815,9 @@ local popup = editor.ui.component(function(props)
                 end
             }),
 
-            editor.ui.separator({}),
+            editor.ui.separator({
+                orientation = editor.ui.ORIENTATION.VERTICAL
+            }),
 
             editor.ui.button({
                 text = "Settings",

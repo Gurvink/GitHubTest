@@ -1,0 +1,639 @@
+local M = {}
+
+local ui = editor.ui
+
+-- local launchers = require("_tools.builtin_bundle_launchers")
+
+local PLATFORM_PATH = "/_services/platform.lua"
+local GAMEMANAGER_PATH = "/_modules/gamemanager.lua"
+local CONFIG_PATH = "/_services/config.lua"
+local AB_TESTER_PATH = "/_modules/A_B_tester.lua"
+local CUSTOM_API_PATH = "/_modules/API/custom_API.lua"
+local GAME_PROJECT_PATH = "/game.project"
+
+local PLATFORM_OPTIONS = {
+	"iOS",
+	"Android",
+	"Windows",
+	"macOS",
+	"Linux",
+	"HTML5",
+}
+
+local APP_TYPE_OPTIONS = {
+	"Default",
+	"Curator",
+	"Viewer",
+}
+
+-- Dialog label -> platform.lua PLATS key
+local PLATFORM_TO_PLATS = {
+	["iOS"] = "IOS",
+	["Android"] = "ANDROID",
+	["Windows"] = "STEAM",
+	["macOS"] = "STEAM",
+	["Linux"] = "STEAM",
+	["HTML5"] = "POKI",
+}
+
+-- Dialog label -> builtin_bundle_launchers export
+local PLATFORM_TO_LAUNCHER = {
+	["iOS"] = "ios",
+	["Android"] = "android",
+	["Windows"] = "windows",
+	["macOS"] = "macos",
+	["Linux"] = "linux",
+	["HTML5"] = "html5",
+}
+
+-- Reverse map for prefilling the dialog from platform.lua currentplatform
+local PLATS_TO_PLATFORM = {
+	IOS = "iOS",
+	ANDROID = "Android",
+	POKI = "HTML5",
+	STEAM = "Windows",
+}
+
+-- Dialog label -> platform.lua APPTYPE key
+local APP_TYPE_TO_APPTYPE = {
+	["Default"] = "DEFAULT",
+	["Curator"] = "CURATOR",
+	["Viewer"] = "VIEWER",
+}
+
+-- Reverse map for prefilling the dialog from platform.lua currentapptype
+local APPTYPE_TO_APP_TYPE = {
+	DEFAULT = "Default",
+	CURATOR = "Curator",
+	VIEWER = "Viewer",
+}
+
+local function is_macos_host()
+	return editor.platform:sub(-#"macos") == "macos"
+end
+
+local function read_ab_version_options(ab_tester_text)
+	local options = {}
+	local open = ab_tester_text:find("M%.versions%s*=%s*%{")
+	if not open then
+		return { "DEFAULT" }
+	end
+	open = ab_tester_text:find("%{", open)
+	if not open then
+		return { "DEFAULT" }
+	end
+
+	local depth = 0
+	local content_start = open + 1
+	local content_end
+	for i = open, #ab_tester_text do
+		local c = ab_tester_text:sub(i, i)
+		if c == "{" then
+			depth = depth + 1
+		elseif c == "}" then
+			depth = depth - 1
+			if depth == 0 then
+				content_end = i - 1
+				break
+			end
+		end
+	end
+	if not content_end then
+		return { "DEFAULT" }
+	end
+
+	local content = ab_tester_text:sub(content_start, content_end)
+	depth = 0
+	for line in content:gmatch("[^\r\n]+") do
+		local open_count = select(2, line:gsub("%{", ""))
+		local close_count = select(2, line:gsub("%}", ""))
+		if depth == 0 then
+			local key = line:match("^%s*([%w_]+)%s*=%s*%{")
+			if key then
+				options[#options + 1] = key
+			end
+		end
+		depth = depth + open_count - close_count
+	end
+
+	if #options == 0 then
+		return { "DEFAULT" }
+	end
+	return options
+end
+
+local function read_bundle_defaults()
+	local platform_text = editor.get(PLATFORM_PATH, "text")
+	local platform_key = platform_text:match("local%s+currentplatform%s*=%s*PLATS%.([%w_]+)")
+	local app_type_key = platform_text:match("local%s+currentapptype%s*=%s*APPTYPE%.([%w_]+)")
+
+	local gamemanager_text = editor.get(GAMEMANAGER_PATH, "text")
+	local bypass = gamemanager_text:match("M%.DEBUG_bypass_debug_check%s*=%s*(%a+)")
+
+	local config_text = editor.get(CONFIG_PATH, "text")
+	local amplitude_enabled_value = config_text:match("M%.amplitude_enabled%s*=%s*(%a+)")
+	local amplitude_region_lock_value = config_text:match("M%.amplitude_region_lock%s*=%s*(%a+)")
+
+	local ab_tester_text = editor.get(AB_TESTER_PATH, "text")
+	local ab_testing_value = ab_tester_text:match("local%s+USE_AB_TESTING%s*=%s*(%a+)")
+	local force_version_value = ab_tester_text:match("local%s+FORCE_VERSION%s*=%s*(%S+)")
+	local force_version_creation_value = ab_tester_text:match("local%s+FORCE_VERSION_CREATION%s*=%s*(%a+)")
+	local ab_version_options = read_ab_version_options(ab_tester_text)
+
+	local platform = PLATS_TO_PLATFORM[platform_key] or "Windows"
+	local app_type = APPTYPE_TO_APP_TYPE[app_type_key] or "Default"
+	-- Debug toggle ON means bypass is false (debug mechanics enabled)
+	local debug_enabled = bypass == "false"
+	local amplitude_enabled = amplitude_enabled_value ~= "false"
+	local amplitude_region_lock = amplitude_region_lock_value ~= "false"
+	local ab_testing_enabled = ab_testing_value ~= "false"
+	local force_version_enabled = force_version_value ~= nil and force_version_value ~= "nil"
+	local force_version = force_version_value and force_version_value:match("M%.versions%.([%w_]+)") or ab_version_options[1]
+	local force_version_creation = force_version_creation_value == "true"
+
+	-- Prefer a version that still exists in M.versions
+	local force_version_valid = false
+	for i = 1, #ab_version_options do
+		if ab_version_options[i] == force_version then
+			force_version_valid = true
+			break
+		end
+	end
+	if not force_version_valid then
+		force_version = ab_version_options[1]
+	end
+
+	return platform, app_type, debug_enabled, amplitude_enabled, amplitude_region_lock, ab_testing_enabled, force_version_enabled, force_version, force_version_creation, ab_version_options
+end
+
+local function read_project_version_defaults()
+	local version = tostring(editor.get(GAME_PROJECT_PATH, "project.version") or "")
+	local version_code = editor.get(GAME_PROJECT_PATH, "android.version_code")
+	if type(version_code) ~= "number" then
+		version_code = tonumber(version_code) or 0
+	end
+	local bundle_version = tostring(editor.get(GAME_PROJECT_PATH, "ios.bundle_version") or "")
+	return version, version_code, bundle_version
+end
+
+local function patch_platform_settings(platform_label, app_type_label)
+	local platform_key = PLATFORM_TO_PLATS[platform_label]
+	if not platform_key then
+		error("Unknown platform: " .. tostring(platform_label))
+	end
+
+	local app_type_key = APP_TYPE_TO_APPTYPE[app_type_label]
+	if not app_type_key then
+		error("Unknown app type: " .. tostring(app_type_label))
+	end
+
+	local text = editor.get(PLATFORM_PATH, "text")
+	local new_text, platform_count = text:gsub(
+		"(local%s+currentplatform%s*=%s*)PLATS%.[%w_]+",
+		"%1PLATS." .. platform_key,
+		1
+	)
+	if platform_count ~= 1 then
+		error("Could not find local currentplatform assignment in platform.lua")
+	end
+
+	local final_text, app_type_count = new_text:gsub(
+		"(local%s+currentapptype%s*=%s*)APPTYPE%.[%w_]+",
+		"%1APPTYPE." .. app_type_key,
+		1
+	)
+	if app_type_count ~= 1 then
+		error("Could not find local currentapptype assignment in platform.lua")
+	end
+
+	local txs = {}
+	if final_text ~= text then
+		txs[#txs + 1] = editor.tx.set(PLATFORM_PATH, "text", final_text)
+	end
+
+	print("Custom Bundle: set currentplatform=PLATS." .. platform_key)
+	print("Custom Bundle: set currentapptype=APPTYPE." .. app_type_key)
+	return txs
+end
+
+local function patch_gamemanager_debug(debug_enabled)
+	local bypass_value = debug_enabled and "false" or "true"
+	local text = editor.get(GAMEMANAGER_PATH, "text")
+	local new_text, bypass_count = text:gsub(
+		"M%.DEBUG_bypass_debug_check%s*=%s*%S+",
+		"M.DEBUG_bypass_debug_check = " .. bypass_value,
+		1
+	)
+	if bypass_count ~= 1 then
+		error("Could not find M.DEBUG_bypass_debug_check assignment in gamemanager.lua")
+	end
+
+	local txs = {}
+	if new_text ~= text then
+		txs[#txs + 1] = editor.tx.set(GAMEMANAGER_PATH, "text", new_text)
+	end
+
+	print("Custom Bundle: set DEBUG_bypass_debug_check=" .. bypass_value)
+	return txs
+end
+
+local function patch_amplitude_settings(amplitude_enabled, amplitude_region_lock)
+	local enabled_value = amplitude_enabled and "true" or "false"
+	local region_lock_value = amplitude_region_lock and "true" or "false"
+	local text = editor.get(CONFIG_PATH, "text")
+
+	local new_text, enabled_count = text:gsub(
+		"M%.amplitude_enabled%s*=%s*%S+",
+		"M.amplitude_enabled = " .. enabled_value,
+		1
+	)
+	if enabled_count ~= 1 then
+		error("Could not find M.amplitude_enabled assignment in config.lua")
+	end
+
+	local final_text, region_lock_count = new_text:gsub(
+		"M%.amplitude_region_lock%s*=%s*%S+",
+		"M.amplitude_region_lock = " .. region_lock_value,
+		1
+	)
+	if region_lock_count ~= 1 then
+		error("Could not find M.amplitude_region_lock assignment in config.lua")
+	end
+
+	local txs = {}
+	if final_text ~= text then
+		txs[#txs + 1] = editor.tx.set(CONFIG_PATH, "text", final_text)
+	end
+
+	print("Custom Bundle: set amplitude_enabled=" .. enabled_value)
+	print("Custom Bundle: set amplitude_region_lock=" .. region_lock_value)
+	return txs
+end
+
+local function patch_ab_testing(ab_testing_enabled, force_version_enabled, force_version, force_version_creation)
+	local ab_testing_value = ab_testing_enabled and "true" or "false"
+	local force_version_value = force_version_enabled and ("M.versions." .. force_version) or "nil"
+	local force_version_creation_value = force_version_creation and "true" or "false"
+	local text = editor.get(AB_TESTER_PATH, "text")
+
+	local new_text, ab_testing_count = text:gsub(
+		"local%s+USE_AB_TESTING%s*=%s*%S+",
+		"local USE_AB_TESTING = " .. ab_testing_value,
+		1
+	)
+	if ab_testing_count ~= 1 then
+		error("Could not find local USE_AB_TESTING assignment in A_B_tester.lua")
+	end
+
+	local after_force_version, force_version_count = new_text:gsub(
+		"local%s+FORCE_VERSION%s*=%s*%S+",
+		"local FORCE_VERSION = " .. force_version_value,
+		1
+	)
+	if force_version_count ~= 1 then
+		error("Could not find local FORCE_VERSION assignment in A_B_tester.lua")
+	end
+
+	local final_text, force_creation_count = after_force_version:gsub(
+		"local%s+FORCE_VERSION_CREATION%s*=%s*%S+",
+		"local FORCE_VERSION_CREATION = " .. force_version_creation_value,
+		1
+	)
+	if force_creation_count ~= 1 then
+		error("Could not find local FORCE_VERSION_CREATION assignment in A_B_tester.lua")
+	end
+
+	local txs = {}
+	if final_text ~= text then
+		txs[#txs + 1] = editor.tx.set(AB_TESTER_PATH, "text", final_text)
+	end
+
+	print("Custom Bundle: set USE_AB_TESTING=" .. ab_testing_value)
+	print("Custom Bundle: set FORCE_VERSION=" .. force_version_value)
+	print("Custom Bundle: set FORCE_VERSION_CREATION=" .. force_version_creation_value)
+	return txs
+end
+
+local function patch_custom_api_sandbox()
+	-- Builds must always use the production API, never the sandbox.
+	local text = editor.get(CUSTOM_API_PATH, "text")
+	local new_text, count = text:gsub(
+		"local%s+USE_SANDBOX_ENVIRONMENT%s*=%s*%S+",
+		"local USE_SANDBOX_ENVIRONMENT = false",
+		1
+	)
+	if count ~= 1 then
+		error("Could not find local USE_SANDBOX_ENVIRONMENT assignment in custom_API.lua")
+	end
+
+	local txs = {}
+	if new_text ~= text then
+		txs[#txs + 1] = editor.tx.set(CUSTOM_API_PATH, "text", new_text)
+	end
+
+	print("Custom Bundle: set USE_SANDBOX_ENVIRONMENT=false")
+	return txs
+end
+
+local function patch_game_project(platform_label, version, version_code, bundle_version)
+	local txs = {}
+	local current_version = tostring(editor.get(GAME_PROJECT_PATH, "project.version") or "")
+	if version ~= current_version then
+		txs[#txs + 1] = editor.tx.set(GAME_PROJECT_PATH, "project.version", version)
+	end
+
+	if platform_label == "Android" then
+		local code = tonumber(version_code) or 0
+		local current_code = editor.get(GAME_PROJECT_PATH, "android.version_code")
+		if type(current_code) ~= "number" then
+			current_code = tonumber(current_code) or 0
+		end
+		if code ~= current_code then
+			txs[#txs + 1] = editor.tx.set(GAME_PROJECT_PATH, "android.version_code", code)
+		end
+	elseif platform_label == "iOS" then
+		local current_bundle = tostring(editor.get(GAME_PROJECT_PATH, "ios.bundle_version") or "")
+		if bundle_version ~= current_bundle then
+			txs[#txs + 1] = editor.tx.set(GAME_PROJECT_PATH, "ios.bundle_version", bundle_version)
+		end
+	end
+
+	return txs
+end
+
+local function apply_patches(result)
+	local txs = {}
+	local platform_txs = patch_platform_settings(result.platform, result.app_type)
+	for i = 1, #platform_txs do
+		txs[#txs + 1] = platform_txs[i]
+	end
+	local gamemanager_txs = patch_gamemanager_debug(result.debug_enabled)
+	for i = 1, #gamemanager_txs do
+		txs[#txs + 1] = gamemanager_txs[i]
+	end
+	local amplitude_txs = patch_amplitude_settings(result.amplitude_enabled, result.amplitude_region_lock)
+	for i = 1, #amplitude_txs do
+		txs[#txs + 1] = amplitude_txs[i]
+	end
+	local ab_testing_txs = patch_ab_testing(
+		result.ab_testing_enabled,
+		result.force_version_enabled,
+		result.force_version,
+		result.force_version_creation
+	)
+	for i = 1, #ab_testing_txs do
+		txs[#txs + 1] = ab_testing_txs[i]
+	end
+	local sandbox_txs = patch_custom_api_sandbox()
+	for i = 1, #sandbox_txs do
+		txs[#txs + 1] = sandbox_txs[i]
+	end
+	local project_txs = patch_game_project(
+		result.platform,
+		result.version,
+		result.version_code,
+		result.bundle_version
+	)
+	for i = 1, #project_txs do
+		txs[#txs + 1] = project_txs[i]
+	end
+	if #txs > 0 then
+		editor.transact(txs)
+		editor.save()
+	end
+end
+
+local function show_error(message)
+	ui.show_dialog(ui.dialog({
+		title = "CUSTOM BUNDLE",
+		content = ui.vertical({
+			padding = ui.PADDING.LARGE,
+			children = {
+				ui.paragraph({ text = message }),
+			},
+		}),
+		buttons = {
+			ui.dialog_button({ text = "OK", default = true, cancel = true }),
+		},
+	}))
+end
+
+local function open_platform_bundle(platform_label)
+	if platform_label == "iOS" and not is_macos_host() then
+		show_error("iOS bundling is only available on macOS.")
+		return
+	end
+
+	local launcher_key = PLATFORM_TO_LAUNCHER[platform_label]
+	local launcher = launchers[launcher_key]
+	if not launcher then
+		error("No bundle launcher for platform: " .. tostring(platform_label))
+	end
+
+	-- true = show the normal Bundle dialog (same prefs keys as Project → Bundle)
+	launcher(true)
+end
+
+local custom_bundle_dialog = ui.component(function(props)
+	local platform, set_platform = ui.use_state(props.default_platform or "Windows")
+	local app_type, set_app_type = ui.use_state(props.default_app_type or "Default")
+	local debug_enabled, set_debug_enabled = ui.use_state(props.default_debug == true)
+	local amplitude_enabled, set_amplitude_enabled = ui.use_state(props.default_amplitude_enabled ~= false)
+	local amplitude_region_lock, set_amplitude_region_lock = ui.use_state(props.default_amplitude_region_lock ~= false)
+	local ab_testing_enabled, set_ab_testing_enabled = ui.use_state(props.default_ab_testing_enabled ~= false)
+	local force_version_enabled, set_force_version_enabled = ui.use_state(props.default_force_version_enabled == true)
+	local force_version, set_force_version = ui.use_state(props.default_force_version or "DEFAULT")
+	local force_version_creation, set_force_version_creation = ui.use_state(props.default_force_version_creation == true)
+	local ab_version_options = props.ab_version_options or { "DEFAULT" }
+	local version, set_version = ui.use_state(props.default_version or "")
+	local version_code, set_version_code = ui.use_state(props.default_version_code or 0)
+	local bundle_version, set_bundle_version = ui.use_state(props.default_bundle_version or "")
+
+	local rows = {
+		{
+			ui.label({ text = "Platform", alignment = ui.ALIGNMENT.RIGHT }),
+			ui.select_box({
+				value = platform,
+				options = PLATFORM_OPTIONS,
+				on_value_changed = set_platform,
+			}),
+		},
+		{
+			ui.label({ text = "App type", alignment = ui.ALIGNMENT.RIGHT }),
+			ui.select_box({
+				value = app_type,
+				options = APP_TYPE_OPTIONS,
+				on_value_changed = set_app_type,
+			}),
+		},
+		{
+			ui.label({ text = "Debug", alignment = ui.ALIGNMENT.RIGHT }),
+			ui.check_box({
+				value = debug_enabled,
+				text = "Enable debug mechanics",
+				on_value_changed = set_debug_enabled,
+			}),
+		},
+		{
+			ui.label({ text = "AB Testing", alignment = ui.ALIGNMENT.RIGHT }),
+			ui.check_box({
+				value = ab_testing_enabled,
+				text = "Enable AB Testing",
+				on_value_changed = set_ab_testing_enabled,
+			}),
+		},
+		{
+			ui.label({ text = "Force version", alignment = ui.ALIGNMENT.RIGHT }),
+			ui.check_box({
+				value = force_version_enabled,
+				text = "Force a specific AB version",
+				on_value_changed = set_force_version_enabled,
+			}),
+		},
+		{
+			ui.label({ text = "Forced version", alignment = ui.ALIGNMENT.RIGHT }),
+			ui.select_box({
+				value = force_version,
+				options = ab_version_options,
+				enabled = force_version_enabled,
+				on_value_changed = set_force_version,
+			}),
+		},
+		{
+			ui.label({ text = "Force creation", alignment = ui.ALIGNMENT.RIGHT }),
+			ui.check_box({
+				value = force_version_creation,
+				text = "Force new version creation",
+				on_value_changed = set_force_version_creation,
+			}),
+		},
+		{
+			ui.label({ text = "Version", alignment = ui.ALIGNMENT.RIGHT }),
+			ui.string_field({
+				value = version,
+				on_value_changed = set_version,
+			}),
+		},
+	}
+
+	if platform == "Android" then
+		rows[#rows + 1] = {
+			ui.label({ text = "Version code", alignment = ui.ALIGNMENT.RIGHT }),
+			ui.integer_field({
+				value = version_code,
+				on_value_changed = set_version_code,
+			}),
+		}
+	elseif platform == "iOS" then
+		rows[#rows + 1] = {
+			ui.label({ text = "Bundle version", alignment = ui.ALIGNMENT.RIGHT }),
+			ui.string_field({
+				value = bundle_version,
+				on_value_changed = set_bundle_version,
+			}),
+		}
+	end
+
+	rows[#rows + 1] = {
+		ui.label({ text = "Amplitude", alignment = ui.ALIGNMENT.RIGHT }),
+		ui.check_box({
+			value = amplitude_enabled,
+			text = "Enable Amplitude analytics",
+			on_value_changed = set_amplitude_enabled,
+		}),
+	}
+	rows[#rows + 1] = {
+		ui.label({ text = "Region lock", alignment = ui.ALIGNMENT.RIGHT }),
+		ui.check_box({
+			value = amplitude_region_lock,
+			text = "Limit Amplitude to USA and Georgia",
+			enabled = amplitude_enabled,
+			on_value_changed = set_amplitude_region_lock,
+		}),
+	}
+
+	return ui.dialog({
+		title = "CUSTOM BUNDLE",
+		content = ui.vertical({
+			padding = ui.PADDING.LARGE,
+			spacing = ui.SPACING.MEDIUM,
+			children = {
+				ui.paragraph({
+					text = "Sets platform, app type, debug, AB testing, force version, version, and Amplitude values, forces custom_API off the sandbox API, then opens the normal Bundle dialog for the selected platform.",
+				}),
+				ui.grid({
+					columns = { {}, { grow = true } },
+					spacing = ui.SPACING.SMALL,
+					children = rows,
+				}),
+			},
+		}),
+		buttons = {
+			ui.dialog_button({ text = "Cancel", cancel = true }),
+			ui.dialog_button({
+				text = "Continue",
+				default = true,
+				result = {
+					platform = platform,
+					app_type = app_type,
+					debug_enabled = debug_enabled,
+					ab_testing_enabled = ab_testing_enabled,
+					force_version_enabled = force_version_enabled,
+					force_version = force_version,
+					force_version_creation = force_version_creation,
+					amplitude_enabled = amplitude_enabled,
+					amplitude_region_lock = amplitude_region_lock,
+					version = version,
+					version_code = version_code,
+					bundle_version = bundle_version,
+				},
+			}),
+		},
+	})
+end)
+
+local function show_custom_bundle_dialog()
+	local default_platform, default_app_type, default_debug, default_amplitude_enabled, default_amplitude_region_lock, default_ab_testing_enabled, default_force_version_enabled, default_force_version, default_force_version_creation, ab_version_options = read_bundle_defaults()
+	local default_version, default_version_code, default_bundle_version = read_project_version_defaults()
+	local result = ui.show_dialog(custom_bundle_dialog({
+		default_platform = default_platform,
+		default_app_type = default_app_type,
+		default_debug = default_debug,
+		default_amplitude_enabled = default_amplitude_enabled,
+		default_amplitude_region_lock = default_amplitude_region_lock,
+		default_ab_testing_enabled = default_ab_testing_enabled,
+		default_force_version_enabled = default_force_version_enabled,
+		default_force_version = default_force_version,
+		default_force_version_creation = default_force_version_creation,
+		ab_version_options = ab_version_options,
+		default_version = default_version,
+		default_version_code = default_version_code,
+		default_bundle_version = default_bundle_version,
+	}))
+	if not result then
+		return
+	end
+
+	local ok, err = pcall(function()
+		apply_patches(result)
+		open_platform_bundle(result.platform)
+	end)
+	if not ok then
+		print("Custom Bundle failed: " .. tostring(err))
+		show_error("Custom Bundle failed:\n" .. tostring(err))
+	end
+end
+
+function M.get_commands()
+	return {
+		{
+			label = "CUSTOM BUNDLE",
+			locations = { "Project" },
+			run = function()
+				show_custom_bundle_dialog()
+			end,
+		},
+	}
+end
+
+return M

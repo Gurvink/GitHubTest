@@ -336,13 +336,11 @@ local PLATFORM_SETTINGS = {
             key = "architectures",
             label = "Architectures",
             type = "multiselect",
-            tooltip = "The architectures to build for. 32-bit is for older iOS devices and 64-bit is for newer iOS devices. sim is for the iOS simulator.",
+            tooltip = "The architectures to build for.",
             options = {
-                "32-bit",
-                "64-bit",
-                "sim",
+                "arm64-ios",
             },
-            default = { "64-bit" }
+            default = { "arm64-ios" }
         },
         {
             key = "install",

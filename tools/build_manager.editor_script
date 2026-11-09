@@ -113,12 +113,6 @@ local COMMON_SETTINGS = {
         label = "Contentless Bundle",
         type = "checkbox",
         default = false
-    },
-    {
-        key = "output",
-        label = "Output Directory",
-        type = "directory",
-        default = "builds"
     }
 }
 
@@ -219,12 +213,6 @@ local PLATFORM_SETTINGS = {
             label = "Launch Installed App",
             type = "checkbox",
             default = false
-        },
-        {
-            key = "version_code",
-            label = "Version Code",
-            type = "text",
-            default = ""
         }
     },
 
@@ -349,8 +337,45 @@ local function process_data(data, build)
     if build then
         for name, platform_data in pairs(data.platforms) do
             if platform_data.include then
-                local platform = PLATFORMS[name]
-                local settings = platform_data.settings
+
+                if editor.platform == "x86_64-win32" and name == "ios" then
+                    print('iOS builds require macOS')
+                    return
+                end
+                
+                local options = {
+                    platform = platform_data.platform,
+                    settings = platform_data.settings,
+                    archive = true,
+                    bundle_output = "builds/" .. name,
+                    output = "build/bob/" .. name
+                }
+
+                if platform_data.architectures then
+                    options.architectures = platform_data.architectures
+                end
+
+                if platform_data.bundle_format then
+                    options.bundle_format = platform_data.bundle_format
+                end
+
+                if platform_data.texture_compression then
+                    options.texture_compression = platform_data.texture_compression
+                end
+
+                if platform_data.keystore then
+                    options.keystore = platform_data.keystore
+                end
+
+                if platform_data.keystore_pass then
+                    options.keystore_pass = platform_data.keystore_pass
+                end
+
+                if platform_data.key_pass then
+                    options.key_pass = platform_data.key_pass
+                end
+
+                editor.bob(options, "resolve", "distclean", "build", "bundle")
             end
         end
     end
@@ -541,6 +566,12 @@ local settings_popup = editor.ui.component(function(props)
     local children = {}
 
     local function add_settings(settings)
+        children[#children + 1] = editor.ui.heading({
+            text = settings == COMMON_SETTINGS and "Common Settings" or
+                settings == BUNDLE_SETTINGS and "Bundle Settings" or
+                settings == PLATFORM_SETTINGS[props.platform] and "Platform Settings" or
+                "Settings"
+        })
         for _, setting in ipairs(settings) do
             local key = setting.key
 
@@ -740,11 +771,6 @@ function M.get_commands()
 
         run = function()
             local result = editor.ui.show_dialog(popup({}))
-
-            if not result then
-                print('Cancelled')
-                return
-            end
 
             if result.action == 'push' then
                 process_data(result.data, result.build)

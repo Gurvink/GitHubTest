@@ -33,7 +33,10 @@ with open(".github/build.json") as f:
                 "macos-latest"
                 if name.startswith("ios")
                     else "ubuntu-latest"
-                  )
+                  ),
+            "keystore": settings.get("keystore", ""),
+            "keystore_password": settings.get("keystore_password", ""),
+            "key_pass": settings.get("key_pass", ""),
               })
 
         if not jobs:

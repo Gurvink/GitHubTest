@@ -94,6 +94,14 @@ jobs:
             )
           fi
 
+          if [ -n "$KEYSTORE" ]; then
+            OPTIONS+=(
+              --keystore "$KEYSTORE"
+              --keystore-password "$KEYSTORE_PASSWORD"
+              --key-pass "$KEY_PASS"
+            )
+          fi
+
           java -jar bob.jar \
             "${OPTIONS[@]}" \
             resolve distclean build bundle

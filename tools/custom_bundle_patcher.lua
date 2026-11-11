@@ -241,7 +241,8 @@ if arg then
     local data_json = arg[3]
 
     if not platform or not settings_json or not data_json then
-        error("Usage: lua custom_bundle_patcher.lua" .. platform .. " " .. settings_json .. "" .. data_json)
+        pprint(arg, platform, settings_json, data_json)
+        error("Usage: lua custom_bundle_patcher.lua")
     end
 
     local settings = json.decode(settings_json)

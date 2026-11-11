@@ -26,6 +26,37 @@ jobs:
         run: |
           python3 .github/workflows/read_config.py > matrix.json
 
+  patch:
+
+    strategy:
+      fail-fast: false
+
+    name: Patch for ${{ matrix.platform }} - ${{ matrix.variant }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Lua
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.4
+
+      - name: Read JSON
+        id: config
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          echo "SETTINGS=$(jq -c . .github/build.json).platforms[$PLATFORM]" >> $GITHUB_ENV
+          echo "DATA=$(jq -c . .github/build.json)" >> $GITHUB_ENV
+      
+      - name: Patch
+        env: 
+          PLATFORM: ${{ matrix.platform }}
+        run: | 
+          lua5.4 tools/custom_bundle_patcher.lua "$PLATFORM" "$SETTINGS, $DATA"
+
   build:
     needs: configure
 
@@ -63,6 +94,9 @@ jobs:
           SYMBOLS: ${{ matrix.with_symbols }}
           REPORT: ${{ matrix.build_report }}
           NAME: ${{ matrix.name }}
+          KEYSTORE: ${{ matrix.KEYSTORE }}
+          KEYSTORE_PASSWORD: ${{ matrix.KEYSTORE_PASSWORD }}
+          KEY_PASS: ${{ matrix.KEY_PASS }}
 
         run: |
           OPTIONS=(

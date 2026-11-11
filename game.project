@@ -1,6 +1,6 @@
 [project]
 title = GitHubTest
-version = 1.0
+version = 0.0.0
 
 [bootstrap]
 main_collection = /main/main.collectionc
@@ -29,3 +29,5 @@ max_count = 256
 [library]
 include_dirs = 
 
+[android]
+version_code = 0

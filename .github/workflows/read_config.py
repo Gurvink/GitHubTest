@@ -37,7 +37,7 @@ with open(".github/build.json") as f:
             "keystore": settings.get("keystore", ""),
             "keystore_password": settings.get("keystore_password", ""),
             "key_pass": settings.get("key_pass", ""),
-              })
+            })
 
         if not jobs:
             raise ValueError("No platforms selected")

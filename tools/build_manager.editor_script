@@ -1,3 +1,5 @@
+local patcher = require("tools.custom_bundle_patcher")
+
 local PLATFORMS = {
     windows = "x86_64-win32",
     linux = "x86_64-linux",
@@ -94,7 +96,7 @@ local BUNDLE_SETTINGS = {
         default = false
     },
     {
-        key = "Forced Version",
+        key = "forced_version",
         label = "Forced Version",
         tooltip = "The forced version of the game for AB testing.",
         type = "select",
@@ -104,7 +106,7 @@ local BUNDLE_SETTINGS = {
         default = "default"
     },
     {
-        key = "Force creation",
+        key = "force_creation",
         label = "Force creation",
         tooltip = "Force the creation of a new AB testing group.",
         type = "checkbox",
@@ -217,7 +219,8 @@ local PLATFORM_SETTINGS = {
             key = "architectures",
             label = "Architectures",
             type = "multiselect",
-            tooltip = "The architectures to build for. x86_64 is for intel and AMD processors and arm64 for Apple Silicon processors.",
+            tooltip =
+            "The architectures to build for. x86_64 is for intel and AMD processors and arm64 for Apple Silicon processors.",
             options = {
                 "x86_64-macos",
                 "arm64-macos"
@@ -234,7 +237,8 @@ local PLATFORM_SETTINGS = {
             key = "architectures",
             label = "Architectures",
             type = "multiselect",
-            tooltip = "The architectures to build for. arm64 is for ARM processors and armv7 for older ARM processors and x86_64 for Intel processors.",
+            tooltip =
+            "The architectures to build for. arm64 is for ARM processors and armv7 for older ARM processors and x86_64 for Intel processors.",
             options = {
                 "arm64-android",
                 "armv7-android",
@@ -297,7 +301,8 @@ local PLATFORM_SETTINGS = {
             key = "architectures",
             label = "Architectures",
             type = "multiselect",
-            tooltip = "The architectures to build for. wasm-web is for WebAssembly and wasm_pthread-web is for WebAssembly with pthreads.",
+            tooltip =
+            "The architectures to build for. wasm-web is for WebAssembly and wasm_pthread-web is for WebAssembly with pthreads.",
             options = {
                 "wasm-web",
                 "wasm_pthread-web"
@@ -364,6 +369,68 @@ local PLATFORM_SETTINGS = {
 local CONFIG = '.github/build.json'
 
 local M = {}
+
+local function read_ab_versions(ab_path)
+    if not ab_path or ab_path == "" then
+        print("no ab_path")
+        return { "DEFAULT" }
+    end
+
+    local ab_text = editor.get("/"..ab_path, "text")
+
+    local options = {}
+    local open = ab_text:find("M%.versions%s*=%s*%{")
+    if not open then
+        print("no open")
+        return { "DEFAULT" }
+    end
+
+    open = ab_text:find("{", open)
+    if not open then
+        print("no open part II")
+        return { "DEFAULT" }
+    end
+
+    local depth = 0
+    local content_start = open + 1
+    local content_end
+    for i = open, #ab_text do
+        local c = ab_text:sub(i, i)
+        if c == "{" then
+            depth = depth + 1
+        elseif c == "}" then
+            depth = depth - 1
+            if depth == 0 then
+                content_end = i - 1
+                break
+            end
+        end
+    end
+    if not content_end then
+        print("no content_end")
+        return { "DEFAULT" }
+    end
+
+    local content = ab_text:sub(content_start, content_end)
+    depth = 0
+    for line in content:gmatch("[^\r\n]+") do
+        local open_count = select(2, line:gsub("%{", ""))
+        local close_count = select(2, line:gsub("%}", ""))
+        if depth == 0 then
+            local key = line:match("^%s*([%w_]+)%s*=%s*%{")
+            if key then
+                options[#options + 1] = key
+            end
+        end
+        depth = depth + open_count - close_count
+    end
+
+    if #options == 0 then
+        print("no options")
+        return { "DEFAULT" }
+    end
+    return options
+end
 
 local function load_config()
     local file = io.open(CONFIG, "r")
@@ -464,15 +531,21 @@ local function process_data(data, build)
     file:close()
     if build then
         for name, platform_data in pairs(data.platforms) do
+            
             if platform_data.include then
                 if name == "ios" and editor.platform:sub(- #"macos") ~= "macos" then
                     print('iOS builds require macOS')
                     goto continue
                 end
 
+                local ok, err = pcall(patcher.patch_bundle, name, platform_data.settings, data)
+
+                if not ok then
+                    print("Failed to patch bundle for platform " .. name .. ": " .. tostring(err))
+                end
+
                 local options = {
                     platform = platform_data.platform,
-                    settings = platform_data.settings,
                     archive = true,
                     bundle_output = "builds/" .. name,
                     output = "build/bob/" .. name
@@ -506,6 +579,7 @@ local function process_data(data, build)
                 ::continue::
             end
         end
+        print("Finished building")
     end
 end
 
@@ -573,7 +647,13 @@ local function get_ui_element(setting, value, on_value_changed)
     elseif setting.type == "checkbox" then
         input = editor.ui.check_box({
             value = value == true,
+            text = setting.label,
+            tooltip = setting.tooltip,
             on_value_changed = on_value_changed
+        })
+        label = editor.ui.label({
+            text = "",
+            alignment = editor.ui.ALIGNMENT.LEFT
         })
     elseif setting.type == "directory"
         or setting.type == "file" then
@@ -678,6 +758,11 @@ local settings_popup = editor.ui.component(function(props)
     local data, set_data = editor.ui.use_state(get_default_settings, props.platform, props.saved_settings)
 
     local children = {}
+
+    pprint(data)
+
+    BUNDLE_SETTINGS[5].options = read_ab_versions(props.settings.ab_tester_path)
+    BUNDLE_SETTINGS[5].default = BUNDLE_SETTINGS[5].options[1] or "default"
 
 
     local function add_settings(settings)
@@ -823,7 +908,7 @@ local popup = editor.ui.component(function(props)
                     local p = key:match("^[^_]+")
 
                     local result = editor.ui.show_dialog(
-                        settings_popup({ platform = p, saved_settings = data.platforms[key].settings })
+                        settings_popup({ platform = p, saved_settings = data.platforms[key].settings, settings = data })
                     )
 
                     if result and result.settings then

@@ -236,16 +236,26 @@ function M.patch_bundle(platform, settings, data)
 end
 
 if arg then
-    local platform = arg[1]
+
+    local PLATFORM_TO_PLAT = {
+        ["wasm-web"] = "html5",
+        ["x86_64-macos"] = "macos",
+        ["x86_64-linux"] = "linux",
+        ["x86_64-win32"] = "windows",
+        ["arm64-ios"] = "ios",
+        ["armv7-android"] = "android"
+    }
+
+    local platform = PLATFORM_TO_PLAT[arg[1]]
     local data_json = arg[2]
 
     if not platform or not data_json then
-        pprint(arg, platform, settings_json, data_json)
+        pprint(arg, platform, data_json)
         error("Usage: lua custom_bundle_patcher.lua")
     end
 
-    local settings = json.decode(settings_json)
     local data = json.decode(data_json)
+    local settings = data.platforms[platform]
 
     M.patch_bundle(platform, settings, data)
 end

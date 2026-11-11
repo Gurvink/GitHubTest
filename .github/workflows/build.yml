@@ -49,7 +49,7 @@ jobs:
       - name: Read JSON
         id: config
         run: |
-          echo "DATA=$(jq -c . .github/build.json)" >> $GITHUB_ENV
+          echo "DATA=$(jq -c . .github/build.json)" >> $GITHUB_ENV"
       
       - name: Patch
         env: 

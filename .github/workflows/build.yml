@@ -40,22 +40,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Lua
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y lua5.4 lua-cjson
-
-      - name: Read JSON
-        run: |
-          echo "DATA=$(jq -c . .github/build.json)" >> "$GITHUB_ENV"
-
-      - name: Patch
-        env:
-          PLATFORM: ${{ matrix.platform }}
-        run: |
-          lua5.4 tools/custom_bundle_patcher.lua \
-            "$PLATFORM" "$DATA"
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:

@@ -22,42 +22,42 @@ local GLOBAL_SETTINGS = {
         label = "Platform Path",
         tooltip = "The path to the platform.lua file, used for platform-specific code.",
         type = "file",
-        default = ""
+        default = "_services/platform.lua"
     },
     {
         key = "gamemanager_path",
         label = "Game Manager Path",
         tooltip = "The path to the gamemanager.lua file, used for game management.",
         type = "file",
-        default = ""
+        default = "_modules/gamemanager.lua"
     },
     {
         key = "config_path",
         label = "Config Path",
         tooltip = "The path to the config.json file, used for configuration.",
         type = "file",
-        default = ""
+        default = "_services/config.lua"
     },
     {
         key = "ab_tester_path",
         label = "AB Tester Path",
         tooltip = "The path to the ab_tester.lua file, used for A/B testing.",
         type = "file",
-        default = ""
+        default = "_modules/A_B_tester.lua"
     },
     {
         key = "custom_api_path",
         label = "Custom API Path",
         tooltip = "The path to the custom_api.lua file, used for custom API calls.",
         type = "file",
-        default = ""
+        default = "_modules/API/custom_API.lua"
     },
     {
         key = "game_project_path",
         label = "Game Project Path",
         tooltip = "The path to the game project, used for building the game.",
         type = "file",
-        default = ""
+        default = "game.project"
     }
 }
 
@@ -181,6 +181,13 @@ local COMMON_SETTINGS = {
         tooltip = "Create a contentless bundle for the build. For creating a bundle without any content.",
         type = "checkbox",
         default = false
+    },
+    {
+        key = "output",
+        label = "Output Path",
+        tooltip = "The output path for the build. For specifying where to save the build.",
+        type = "directory",
+        default = "builds"
     }
 }
 
@@ -547,7 +554,7 @@ local function process_data(data, build)
                 local options = {
                     platform = platform_data.platform,
                     archive = true,
-                    bundle_output = "builds/" .. name,
+                    bundle_output = platform_data.output .. name,
                     output = "build/bob/" .. name
                 }
 
@@ -758,8 +765,6 @@ local settings_popup = editor.ui.component(function(props)
     local data, set_data = editor.ui.use_state(get_default_settings, props.platform, props.saved_settings)
 
     local children = {}
-
-    pprint(data)
 
     BUNDLE_SETTINGS[5].options = read_ab_versions(props.settings.ab_tester_path)
     BUNDLE_SETTINGS[5].default = BUNDLE_SETTINGS[5].options[1] or "default"

@@ -1,5 +1,7 @@
 local M = {}
 
+local json = require("cjson")
+
 local PLATFORM_TO_PLATS = {
     ["ios"] = "IOS",
     ["android"] = "ANDROID",

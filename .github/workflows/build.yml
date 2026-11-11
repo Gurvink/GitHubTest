@@ -25,16 +25,16 @@ jobs:
         id: config
         run: |
           python3 .github/workflows/read_config.py > matrix.json
+          echo "matrix=$(jq -c . matrix.json)" >> "$GITHUB_OUTPUT"
 
-  patch:
-
+  build:
     needs: configure
 
     strategy:
-      matrix: ${{fromJSON(needs.configure.outputs.matrix)}}
+      matrix: ${{ fromJSON(needs.configure.outputs.matrix) }}
       fail-fast: false
 
-    name: Patch for ${{ matrix.platform }} - ${{ matrix.variant }}
+    name: Build for ${{ matrix.platform }} - ${{ matrix.variant }}
     runs-on: ubuntu-latest
 
     steps:
@@ -44,32 +44,19 @@ jobs:
       - name: Setup Lua
         run: |
           sudo apt-get update
-          sudo apt-get install -y lua5.4
+          sudo apt-get install -y lua5.4 lua-cjson
 
       - name: Read JSON
-        id: config
         run: |
-          echo "DATA=$(jq -c . .github/build.json)" >> $GITHUB_ENV"
-      
+          echo "DATA=$(jq -c . .github/build.json)" >> "$GITHUB_ENV"
+
       - name: Patch
-        env: 
+        env:
           PLATFORM: ${{ matrix.platform }}
-        run: | 
-          lua5.4 tools/custom_bundle_patcher.lua "$PLATFORM", $DATA"
-
-  build:
-    needs: configure
-
-    strategy:
-      matrix: ${{fromJSON(needs.configure.outputs.matrix)}}
-      fail-fast: false
-    
-    name: Build for ${{ matrix.platform }} - ${{ matrix.variant }}
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          lua5.4 tools/custom_bundle_patcher.lua \
+            "$PLATFORM" "$VARIANT" "$DATA"
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -139,7 +126,6 @@ jobs:
           java -jar bob.jar \
             "${OPTIONS[@]}" \
             resolve distclean build bundle
-
 
       - name: Upload Build
         uses: actions/upload-artifact@v4

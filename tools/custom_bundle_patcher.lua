@@ -259,6 +259,8 @@ if arg then
     local data = json.decode(data_json)
     local settings = data.platforms[platform]
 
+    pprint(platform, settings, data)
+
     M.patch_bundle(platform, settings, data)
 end
 

@@ -30,7 +30,7 @@ jobs:
     needs: configure
 
     strategy:
-      matrix: ${{ fromJson(needs.config.outputs.matrix) }}
+      matrix: ${{ fromJson(needs.configure.outputs.matrix) }}
       fail-fast: false
 
     name: Build for ${{ matrix.platform }} - ${{ matrix.variant }}

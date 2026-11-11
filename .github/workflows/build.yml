@@ -24,14 +24,13 @@ jobs:
       - name: Read config
         id: config
         run: |
-          python3 .github/workflows/read_config.py > matrix.json
-          echo "matrix=$(jq -c . matrix.json)" >> "$GITHUB_OUTPUT"
+          python3 .github/workflows/read_config.py
 
   build:
     needs: configure
 
     strategy:
-      matrix: ${{ fromJSON(needs.configure.outputs.matrix) }}
+      matrix: ${{ fromJson(needs.config.outputs.matrix) }}
       fail-fast: false
 
     name: Build for ${{ matrix.platform }} - ${{ matrix.variant }}

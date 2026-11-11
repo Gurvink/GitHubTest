@@ -52,10 +52,9 @@ jobs:
       - name: Patch
         env:
           PLATFORM: ${{ matrix.platform }}
-          VARIANT: ${{ matrix.variant }}
         run: |
           lua5.4 tools/custom_bundle_patcher.lua \
-            "$PLATFORM" "$VARIANT" "$DATA"
+            "$PLATFORM" "$DATA"
 
       - name: Setup Java
         uses: actions/setup-java@v4

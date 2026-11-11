@@ -237,10 +237,9 @@ end
 
 if arg then
     local platform = arg[1]
-    local settings_json = arg[2]
-    local data_json = arg[3]
+    local data_json = arg[2]
 
-    if not platform or not settings_json or not data_json then
+    if not platform or not data_json then
         pprint(arg, platform, settings_json, data_json)
         error("Usage: lua custom_bundle_patcher.lua")
     end

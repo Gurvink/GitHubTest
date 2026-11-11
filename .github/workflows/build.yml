@@ -29,6 +29,7 @@ jobs:
   patch:
 
     strategy:
+      matrix: ${{fromJSON(needs.configure.outputs.matrix)}}
       fail-fast: false
 
     name: Patch for ${{ matrix.platform }} - ${{ matrix.variant }}
@@ -45,17 +46,14 @@ jobs:
 
       - name: Read JSON
         id: config
-        env:
-          PLATFORM: ${{ matrix.platform }}
         run: |
-          echo "SETTINGS=$(jq -c . .github/build.json).platforms[$PLATFORM]" >> $GITHUB_ENV
           echo "DATA=$(jq -c . .github/build.json)" >> $GITHUB_ENV
       
       - name: Patch
         env: 
           PLATFORM: ${{ matrix.platform }}
         run: | 
-          lua5.4 tools/custom_bundle_patcher.lua "$PLATFORM" "$SETTINGS, $DATA"
+          lua5.4 tools/custom_bundle_patcher.lua "$PLATFORM", $DATA"
 
   build:
     needs: configure

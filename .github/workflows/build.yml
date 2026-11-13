@@ -4,6 +4,7 @@ name: Defold Build
 on:
   push:
   workflow_dispatch:
+  
 
 jobs:
   configure:
@@ -63,9 +64,11 @@ jobs:
           SYMBOLS: ${{ matrix.with_symbols }}
           REPORT: ${{ matrix.build_report }}
           NAME: ${{ matrix.name }}
-          KEYSTORE: ${{ matrix.KEYSTORE }}
-          KEYSTORE_PASSWORD: ${{ matrix.KEYSTORE_PASSWORD }}
-          KEY_PASS: ${{ matrix.KEY_PASS }}
+          KEYSTORE: ${{ matrix.keystore }}
+          KEYSTORE_PASSWORD: ${{ matrix.keystore_password }}
+          KEY_PASS: ${{ matrix.key_pass  }}
+          IDENTITY : ${{ matrix.identity }}
+          MOBILE_PROVISIONING: ${{ matrix.mobileprovisioning }}
 
         run: |
           OPTIONS=(
@@ -102,6 +105,18 @@ jobs:
               --keystore "$KEYSTORE"
               --keystore-password "$KEYSTORE_PASSWORD"
               --key-pass "$KEY_PASS"
+            )
+          fi
+
+          if [ -n "$IDENTITY" ]; then
+            OPTIONS+=(
+              --identity "$IDENTITY"
+            )
+          fi
+
+          if [ -n "$MOBILE_PROVISIONING" ]; then
+            OPTIONS+=(
+              --mobile-provisioning "$MOBILE_PROVISIONING"
             )
           fi
 

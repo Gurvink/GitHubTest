@@ -22,6 +22,7 @@ local GLOBAL_SETTINGS = {
         label = "Platform Path",
         tooltip = "The path to the platform.lua file, used for platform-specific code.",
         type = "file",
+        relative = true,
         default = "_services/platform.lua"
     },
     {
@@ -29,13 +30,15 @@ local GLOBAL_SETTINGS = {
         label = "Game Manager Path",
         tooltip = "The path to the gamemanager.lua file, used for game management.",
         type = "file",
+        relative = true,
         default = "_modules/gamemanager.lua"
     },
     {
         key = "config_path",
         label = "Config Path",
-        tooltip = "The path to the config.json file, used for configuration.",
+        tooltip = "The path to the config.lua file, used for configuration.",
         type = "file",
+        relative = true,
         default = "_services/config.lua"
     },
     {
@@ -43,6 +46,7 @@ local GLOBAL_SETTINGS = {
         label = "AB Tester Path",
         tooltip = "The path to the ab_tester.lua file, used for A/B testing.",
         type = "file",
+        relative = true,
         default = "_modules/A_B_tester.lua"
     },
     {
@@ -50,6 +54,7 @@ local GLOBAL_SETTINGS = {
         label = "Custom API Path",
         tooltip = "The path to the custom_api.lua file, used for custom API calls.",
         type = "file",
+        relative = true,
         default = "_modules/API/custom_API.lua"
     },
     {
@@ -57,6 +62,7 @@ local GLOBAL_SETTINGS = {
         label = "Game Project Path",
         tooltip = "The path to the game project, used for building the game.",
         type = "file",
+        relative = true,
         default = "game.project"
     }
 }
@@ -145,14 +151,9 @@ local COMMON_SETTINGS = {
     {
         key = "texture_compression",
         label = "Texture Compression",
-        tooltip = "The texture compression format to use. editor uses the editor settings.",
-        type = "select",
-        options = {
-            "enabled",
-            "disabled",
-            "editor"
-        },
-        default = "editor"
+        tooltip = "Enable texture compression for this build.",
+        type = "checkbox",
+        default = false
     },
     {
         key = "with_symbols",
@@ -185,8 +186,9 @@ local COMMON_SETTINGS = {
     {
         key = "output",
         label = "Output Path",
-        tooltip = "The output path for the build. For specifying where to save the build.",
+        tooltip = "The output path for the build.",
         type = "directory",
+        relative = false,
         default = "builds"
     }
 }
@@ -200,10 +202,9 @@ local PLATFORM_SETTINGS = {
             tooltip = "The platform to build for.",
             type = "select",
             options = {
-                "64-bit",
-                "32-bit"
+                "x86_64_win32",
             },
-            default = "64-bit"
+            default = "x86_64_win32"
         }
     },
 
@@ -214,10 +215,10 @@ local PLATFORM_SETTINGS = {
             type = "select",
             tooltip = "The platform to build for. X64 is for intel and AMD processors and arm64 for ARM processors.",
             options = {
-                "x64",
-                "arm64"
+                "x86_64-linux",
+                "arm64-linux"
             },
-            default = "x64"
+            default = "x86_64-linux"
         }
     },
 
@@ -526,6 +527,22 @@ local function copy_with(data, key, value)
     return copy
 end
 
+local function install_app(platform, build_path, launch)
+    print("Installing app for platform", platform, build_path)
+
+    if platform == "android" then
+        local adb_path = "adb"
+        local install_cmd = adb_path .. " install -r " .. build_path .. "/game.apk"
+        os.execute(install_cmd)
+    elseif platform == "ios" then
+        local ios_deploy_path = "ios-deploy"
+        local install_cmd = ios_deploy_path .. " --bundle " .. build_path .. "/game.app"
+        os.execute(install_cmd)
+    else
+        print("Installation not supported for platform", platform)
+    end
+end
+
 local function process_data(data, build)
     if not data then
         return nil
@@ -545,44 +562,85 @@ local function process_data(data, build)
                     goto continue
                 end
 
-                local ok, err = pcall(patcher.patch_bundle, name, platform_data.settings, data)
+                local settings = platform_data.settings
+
+                local ok, err = pcall(patcher.patch_bundle, name, settings, data)
 
                 if not ok then
                     print("Failed to patch bundle for platform " .. name .. ": " .. tostring(err))
                 end
 
+                pprint(platform_data, settings.output)
+
                 local options = {
                     platform = platform_data.platform,
                     archive = true,
-                    bundle_output = platform_data.output .. name,
-                    output = "build/bob/" .. name
+                    bundle_output = settings.output .. "/" .. name,
+                    output = "build/engine/" .. name
                 }
 
-                if platform_data.architectures then
-                    options.architectures = platform_data.architectures
+                if settings.platform then
+                    options.platform = settings.platform
                 end
 
-                if platform_data.bundle_format then
-                    options.bundle_format = platform_data.bundle_format
+                if settings.variant then
+                    options.variant = settings.variant
                 end
 
-                if platform_data.texture_compression then
-                    options.texture_compression = platform_data.texture_compression
+                if settings.with_symbols then
+                    options.with_symbols = settings.with_symbols
                 end
 
-                if platform_data.keystore then
-                    options.keystore = platform_data.keystore
+                if settings.build_report then
+                    options.build_report_json = settings.output .. "/build_report_" .. name .. ".json"
                 end
 
-                if platform_data.keystore_pass then
-                    options.keystore_pass = platform_data.keystore_pass
+                if settings.liveupdate then
+                    options.liveupdate = settings.liveupdate == true and "yes" or "no"
                 end
 
-                if platform_data.key_pass then
-                    options.key_pass = platform_data.key_pass
+                if settings.contentless then
+                    options.exclude_archive = settings.contentless
                 end
 
+                if settings.architectures then
+                    options.architectures = table.concat(settings.architectures, ",")
+                end
+
+                if settings.bundle_format then
+                    options.bundle_format = table.concat(settings.bundle_format, ",")
+                end
+
+                if settings.texture_compression then
+                    options.texture_compression = settings.texture_compression
+                end
+
+                if settings.keystore then
+                    options.keystore = settings.keystore
+                end
+
+                if settings.keystore_pass then
+                    options.keystore_pass = settings.keystore_pass
+                end
+
+                if settings.key_pass then
+                    options.key_pass = settings.key_pass
+                end
+
+                if settings.code_signing_identity and settings.sign then
+                    options.identity = settings.code_signing_identity
+                end
+
+                if settings.provisioning_profile then
+                    options.mobileprovisioning = settings.provisioning_profile
+                end
+                
                 editor.bob(options, "resolve", "distclean", "build", "bundle")
+
+                if settings.install then
+                    install_app(name, settings.output .. "/engine/" .. name, settings.launch)
+                end
+
                 ::continue::
             end
         end
@@ -680,9 +738,7 @@ local function get_ui_element(setting, value, on_value_changed)
 
                     on_pressed = function()
                         local opts = {
-                            title = is_directory
-                                and "Select Directory"
-                                or "Select File"
+                            title = setting.tooltip
                         }
 
                         local path
@@ -693,12 +749,16 @@ local function get_ui_element(setting, value, on_value_changed)
                             path = editor.ui.show_external_file_dialog(opts)
                         end
 
-                        if path then
-                            local relative = to_relative_path(path)
-
-                            if relative then
-                                on_value_changed(relative)
+                        if setting.relative then
+                            if path then
+                                local relative = to_relative_path(path)
+                                
+                                if relative then
+                                    on_value_changed(relative)
+                                end
                             end
+                        else
+                            on_value_changed(path)
                         end
                     end
                 })
